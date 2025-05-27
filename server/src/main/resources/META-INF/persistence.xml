@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="http://java.sun.com/xml/ns/persistence" version="2.0">
+    
+    <!-- Unidad para BD de Votación -->
+    <persistence-unit name="VotingPU">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+        <properties>
+            
+        </properties>
+    </persistence-unit>
+    
+    <!-- Unidad para BD de Aplicación -->
+    <persistence-unit name="ElectionPU">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+        <properties>
+            
+        </properties>
+    </persistence-unit>
+    
+</persistence>
