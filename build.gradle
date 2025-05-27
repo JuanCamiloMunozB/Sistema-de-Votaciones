@@ -10,7 +10,7 @@ subprojects {
 
     slice {
         java {
-            files = [file("../Ice.ice")] 
+            files = fileTree(dir: "../interfaces", include: "*.ice")
         }
     }
 
@@ -47,7 +47,7 @@ subprojects {
     jar {
         manifest {
             attributes(
-                "Main-Class": project.name.capitalize(),
+                "Main-Class": project.name.split('_').collect { it.capitalize() }.join('') + "Main",
                 "Class-Path": configurations.runtimeClasspath.resolve().collect { it.toURI() }.join(' ')
                 // "Class-Path": '/opt/Ice-3.7.6/lib/ice-3.7.6.jar'
         )

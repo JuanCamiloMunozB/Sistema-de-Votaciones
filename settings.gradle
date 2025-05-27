@@ -6,4 +6,6 @@
  */
 
 rootProject.name = 'sistema-de-votaciones'
-include ':client'
+include ':control_center'
+include ':server'
+include ':voting_table'
