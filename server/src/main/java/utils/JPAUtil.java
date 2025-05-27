@@ -1,8 +1,8 @@
 package utils;
 
-import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
-import javax.persistence.Persistence;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Persistence;
 
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.Properties;
@@ -31,9 +31,8 @@ public class JPAUtil {
         try {
             // Common properties
             Map<String, String> baseProperties = new HashMap<>();
-            baseProperties.put("javax.persistence.jdbc.driver", "org.postgresql.Driver");
+            baseProperties.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
             baseProperties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
-            baseProperties.put("hibernate.hbm2ddl.auto", "validate");
             baseProperties.put("hibernate.show_sql", "false");
             baseProperties.put("hibernate.format_sql", "true");
             baseProperties.put("hibernate.connection.pool_size", "10");
@@ -42,17 +41,19 @@ public class JPAUtil {
 
             // EntityManagerFactory for votaciones
             Map<String, String> votingProps = new HashMap<>(baseProperties);
-            votingProps.put("javax.persistence.jdbc.user", config.getProperty("database.votaciones.user"));
-            votingProps.put("javax.persistence.jdbc.password", config.getProperty("database.votaciones.password"));
-            votingProps.put("javax.persistence.jdbc.url", config.getProperty("database.votaciones.url"));
+            votingProps.put("hibernate.hbm2ddl.auto", "validate");
+            votingProps.put("jakarta.persistence.jdbc.user", config.getProperty("database.votaciones.user"));
+            votingProps.put("jakarta.persistence.jdbc.password", config.getProperty("database.votaciones.password"));
+            votingProps.put("jakarta.persistence.jdbc.url", config.getProperty("database.votaciones.url"));
             System.out.println(votingProps);
             emfVoting = Persistence.createEntityManagerFactory("VotingPU", votingProps);
 
             // EntityManagerFactory for Application DB (votos, candidatos, elecciones, etc)
             Map<String, String> electionProps = new HashMap<>(baseProperties);
-            electionProps.put("javax.persistence.jdbc.user", config.getProperty("database.elections.user"));
-            electionProps.put("javax.persistence.jdbc.password", config.getProperty("database.elections.password"));
-            electionProps.put("javax.persistence.jdbc.url", config.getProperty("database.elections.url"));
+            electionProps.put("hibernate.hbm2ddl.auto", "create-drop");
+            electionProps.put("jakarta.persistence.jdbc.user", config.getProperty("database.elections.user"));
+            electionProps.put("jakarta.persistence.jdbc.password", config.getProperty("database.elections.password"));
+            electionProps.put("jakarta.persistence.jdbc.url", config.getProperty("database.elections.url"));
             emfElections = Persistence.createEntityManagerFactory("ElectionPU", electionProps);
 
             System.out.println("EntityManagerFactories initialized successfully");
@@ -71,7 +72,7 @@ public class JPAUtil {
         return emfVoting.createEntityManager();
     }
 
-    public static EntityManager getEntityManagerApplication() {
+    public static EntityManager getEntityManagerElections() {
         if (emfElections == null) {
             throw new IllegalStateException("JPAUtil has not been initialized. Call initialize() first.");
         }
@@ -86,7 +87,7 @@ public class JPAUtil {
             }
             if (emfElections != null && emfElections.isOpen()) {
                 emfElections.close();
-                System.out.println("Application EntityManagerFactory closed");
+                System.out.println("Elections EntityManagerFactory closed");
             }
         }
     }
