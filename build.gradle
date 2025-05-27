@@ -1,0 +1,57 @@
+plugins {
+    id 'com.zeroc.gradle.ice-builder.slice' version '1.5.0' apply false
+    id 'com.github.johnrengelman.shadow' version '7.1.1' apply false
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'com.zeroc.gradle.ice-builder.slice'
+    apply plugin: 'com.github.johnrengelman.shadow' 
+
+    slice {
+        java {
+            files = [file("../Ice.ice")] 
+        }
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        implementation 'com.zeroc:ice:3.7.10'
+        // https://mvnrepository.com/artifact/com.google.code.gson/gson
+        // implementation 'com.google.code.gson:gson:2.10.1'
+        implementation 'org.apache.poi:poi:5.0.0'
+        implementation 'org.apache.poi:poi-ooxml:5.0.0'
+    }
+
+    shadowJar {
+        archiveBaseName.set(project.name)
+        archiveClassifier.set('')
+        archiveVersion.set('')
+    }
+
+    // Tarea para agregar las dependencias al lib donde esta el ejecutable de cada proyecto
+    task copyIceJar(type: Copy) {
+        configurations.runtimeClasspath
+        'ice-3.7.10.jar'
+        //'gson-2.10.1.jar'
+        "$buildDir/libs"
+    }
+
+    jar.dependsOn copyIceJar
+    
+
+    // Definir en el class-path que cada librería está en el libs 
+    jar {
+        manifest {
+            attributes(
+                "Main-Class": project.name.capitalize(),
+                "Class-Path": configurations.runtimeClasspath.resolve().collect { it.toURI() }.join(' ')
+                // "Class-Path": '/opt/Ice-3.7.6/lib/ice-3.7.6.jar'
+        )
+        }
+    }
+    
+}
