@@ -1,6 +1,7 @@
 import ElectionSystem.*;
 import repositories.elections.*;
 import repositories.votaciones.*;
+import com.zeroc.Ice.Current;
 
 public class ServerImpl implements ServerService {
     
@@ -17,5 +18,18 @@ public class ServerImpl implements ServerService {
         this.citizenRepository = new CitizenRepository();
         this.votingTableRepository = new VotingTableRepository();
     }
-        
+
+    @Override
+    public ElectionData getElectionData(String controlCenterId, Current current) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getElectionData'");
+    }
+    
+    @Override
+    public void registerVote(VoteData vote, Current current) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'registerVote'");
+    }
+    
+    
 }
