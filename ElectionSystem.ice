@@ -18,7 +18,7 @@ module ElectionSystem {
     struct VoteData {
         int citizenId;
         int candidateId;
-        string tableCode;
+        int tableId;
         string timestamp;
     }
 
@@ -27,8 +27,6 @@ module ElectionSystem {
 
     struct VotingTableData {
         int id;
-        string code;
-        string location;
         CitizenDataSeq citizens;
     }
 
@@ -39,11 +37,11 @@ module ElectionSystem {
         string startDate;
         string endDate;
         CandidateDataSeq candidates;
-        VotingTableDataSeq tables;
     }
 
     interface ServerService {
-        ElectionData getElectionData(string controlCenterId);
+        ElectionData getElectionData(int controlCenterId);
+        VotingTableDataSeq getVotingTablesFromStation(int controlCenterId);
         void registerVote(VoteData vote);
     }
 

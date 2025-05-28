@@ -19,6 +19,6 @@ public class Vote {
     @JoinColumn(name = "candidate_id")
     private Candidate candidate;
 
-    @Column(name = "table_code")
-    private String tableCode;
+    @Column(name = "table_id")
+    private Integer tableId;
 }

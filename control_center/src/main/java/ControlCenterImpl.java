@@ -1,11 +1,13 @@
+import ElectionSystem.*;
 import com.zeroc.Ice.Current;
 
-import ElectionSystem.CandidateData;
-import ElectionSystem.ControlCenterService;
-import ElectionSystem.VoteData;
-import ElectionSystem.VotingTableData;
-
 public class ControlCenterImpl implements ControlCenterService{
+
+    private ServerServicePrx serverService;
+
+    public ControlCenterImpl(ServerServicePrx serverService) {
+        this.serverService = serverService;
+    }
 
     @Override
     public VotingTableData getVotingTableData(int tableId, Current current) {
