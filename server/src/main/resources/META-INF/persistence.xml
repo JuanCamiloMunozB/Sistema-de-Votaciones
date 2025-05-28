@@ -22,6 +22,9 @@
     <!-- Unidad para BD de Aplicación -->
     <persistence-unit name="ElectionPU">
         <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+        <class>models.elections.Election</class>
+        <class>models.elections.Candidate</class>
+        <class>models.elections.Vote</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <properties>
             <!-- propiedades de conexión se pasan desde código -->

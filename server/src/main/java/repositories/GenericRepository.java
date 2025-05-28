@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 
 import java.util.List;
+import java.util.Optional;
 
 public class GenericRepository<T, ID> {
 
@@ -15,14 +16,15 @@ public class GenericRepository<T, ID> {
         this.entityClass = entityClass;
     }
 
-    public T findById(ID id) {
-        return entityManager.find(entityClass, id);
+    public Optional<T> findById(ID id) {
+        return Optional.ofNullable(entityManager.find(entityClass, id));
     }
 
-    public List<T> findAll() {
+    public Optional<List<T>> findAll() {
         String jpql = "SELECT e FROM " + entityClass.getSimpleName() + " e";
         TypedQuery<T> query = entityManager.createQuery(jpql, entityClass);
-        return query.getResultList();
+        List<T> resultList = query.getResultList();
+        return resultList.isEmpty() ? Optional.empty() : Optional.of(resultList);
     }
 
     public void save(T entity) {
