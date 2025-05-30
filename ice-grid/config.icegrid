@@ -2,18 +2,11 @@
 IceGrid.InstanceName=MyElectionGrid
 
 # 2. Configuración del Locator (Cómo los clientes encuentran esta instancia de IceGrid)
-#    El puerto 40620 es un ejemplo; puedes elegir otro si 4061/4062 están ocupados o quieres algo diferente.
 Ice.Default.Locator=MyElectionGrid/Locator:tcp -h localhost -p 40620
 
 # 3. Configuración del Registry (que correrá dentro del proceso del nodo)
-#    Este es el endpoint donde el registry colocalizado ofrecerá sus servicios de cliente/admin.
 IceGrid.Registry.Client.Endpoints=tcp -p 40620
-#    Endpoint para comunicación interna del registry (si es necesario incluso colocalizado)
 IceGrid.Registry.Internal.Endpoints=tcp -p 40630 
-#    Endpoint para que el nodo (colocalizado) se comunique con el registry (colocalizado).
-#    Este podría ser el mismo que Client.Endpoints o uno específico si IceGrid lo maneja así internamente.
-#    Para simplificar, IceGrid a menudo maneja esto automáticamente cuando está colocalizado.
-#    Podríamos incluso omitir Server.Endpoints y Node.Endpoints si Client.Endpoints es suficiente para el maestro.
 IceGrid.Registry.Server.Endpoints=tcp -p 40610
 
 #    Ruta para la base de datos del Registry
@@ -31,16 +24,9 @@ IceGrid.Node.Name=Node1 # Nombre del nodo (debe coincidir con tu electionApp.xml
 IceGrid.Node.Data=C:/icegrid_data/node1_collocated # Nueva ruta para los datos del nodo
 #    Endpoints donde el propio nodo escucha (para comunicación directa si es necesaria, o para los servidores que gestiona)
 IceGrid.Node.Endpoints=tcp -p 40600
-#    ¡LA CLAVE! Le dice al nodo que inicie y gestione un registry colocalizado.
 IceGrid.Node.CollocateRegistry=1
 
 # 5. Trazas (útiles para depuración)
 Ice.Trace.Network=1
 Ice.Trace.Locator=1
 Ice.Trace.Retry=1
-#IceGrid.Node.Trace.Activator=1 # Para ver la activación de servidores
-#IceGrid.Registry.Trace.Replica=1 # Para ver actividad de replicación/interna
-
-# 6. (Opcional) Configuración para icegridadmin si necesitas pasar credenciales por defecto desde aquí
-# IceGridAdmin.Username=admin
-# IceGridAdmin.Password=secret
