@@ -23,7 +23,7 @@
                     activation="on-demand" 
                     application-distrib="false"> 
                 <option>-cp</option>
-                <option>C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\server\build\classes\java\main;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\server\build\libs\*;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\ice-3.7.9.jar;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\postgresql-42.7.3.jar;...</option>
+                <option>C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\server\build\classes\java\main;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\server\build\libs\*;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\ice-3.7.9.jar;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\icestorm-3.7.9.jar;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\postgresql-42.7.3.jar;...</option>
                 <option>ServerMain</option> 
                 <property name="Ice.Config" value="C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\server\src\main\resources\config.server.cfg"/>
                 <adapter name="ServerAdapter" id="ServerAdapterID">

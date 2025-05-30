@@ -111,4 +111,4 @@ class ControlCenterImplTest {
         verify(serverServicePrx, never()).registerVote(any(VoteData.class));
         assertTrue(controlCenterImpl.pendingVotes.isEmpty());
     }
-} 
+}

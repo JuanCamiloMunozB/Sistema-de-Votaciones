@@ -54,4 +54,4 @@ class VotingTableImplTest {
         assertSame(expectedException, actualException, "Should rethrow the exception from Control Center");
         verify(controlCenterServicePrx, times(1)).submitVote(sampleVoteData);
     }
-} 
+}

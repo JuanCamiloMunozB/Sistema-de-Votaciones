@@ -5,9 +5,13 @@ import models.votaciones.VotingTable;
 import repositories.elections.*;
 import repositories.votaciones.*;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.zeroc.Ice.Current;
 
@@ -23,6 +27,8 @@ public class ServerImpl implements ServerService {
     List<Candidate> candidates;
     private Map<Integer, List<VotingTable>> votingTablesByStation;
     private Map<Integer, List<Citizen>> citizensByTable;
+    
+    private final Map<String, EventObserverPrx> subscribers = new ConcurrentHashMap<>();
     
     public ServerImpl(ElectionRepository electionRepository, 
                       CandidateRepository candidateRepository, 
@@ -98,13 +104,77 @@ public class ServerImpl implements ServerService {
             .findFirst()
             .orElseThrow(() -> new RuntimeException("Voting table not found in server context"));
 
-        Vote newVote = new Vote();
-        newVote.setCitizenId(vote.citizenId);
-        newVote.setCandidate(candidate);
-        newVote.setTableId(votingTable.getId());
-        newVote.setTimestamp(java.time.LocalDateTime.now());
+        Vote newVoteToSave = new Vote();
+        newVoteToSave.setCitizenId(vote.citizenId);
+        newVoteToSave.setCandidate(candidate);
+        newVoteToSave.setTableId(votingTable.getId());
+        newVoteToSave.setTimestamp(java.time.LocalDateTime.now());
+        if (this.currentElection != null) {
+            newVoteToSave.setElection(this.currentElection);
+        }
 
-        voteRepository.save(newVote);
+        voteRepository.save(newVoteToSave);
+        System.out.println("Vote registered for citizen: " + vote.citizenId);
+
+        Map<String, String> details = new HashMap<>();
+        details.put("citizenId", String.valueOf(vote.citizenId));
+        details.put("candidateId", String.valueOf(vote.candidateId));
+        details.put("tableId", String.valueOf(vote.tableId));
+        if (this.currentElection != null) {
+            details.put("electionId", String.valueOf(this.currentElection.getId()));
+        }
+        details.put("originalTimestamp", vote.timestamp);
+
+        ElectionEvent event = new ElectionEvent(
+            EventType.VoteRegistered,
+            LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME),
+            details
+        );
+        notifySubscribers(event);
+    }
+
+    @Override
+    public void subscribe(EventObserverPrx observer, String observerIdentity, Current current) {
+        if (observer == null || observerIdentity == null || observerIdentity.isEmpty()) {
+            System.err.println("Subscribe attempt with null observer or empty identity.");
+            return;
+        }
+
+        subscribers.put(observerIdentity, observer);
+        System.out.println("Observer '" + observerIdentity + "' subscribed.");
+    }
+
+    @Override
+    public void unsubscribe(String observerIdentity, Current current) {
+        if (observerIdentity == null || observerIdentity.isEmpty()) {
+            System.err.println("Unsubscribe attempt with empty identity.");
+            return;
+        }
+        EventObserverPrx removed = subscribers.remove(observerIdentity);
+        if (removed != null) {
+            System.out.println("Observer '" + observerIdentity + "' unsubscribed.");
+        } else {
+            System.out.println("Observer '" + observerIdentity + "' not found for unsubscription.");
+        }
+    }
+
+    private void notifySubscribers(ElectionEvent event) {
+        System.out.println("Notifying " + subscribers.size() + " subscribers of event: " + event.type);
+        List<Map.Entry<String, EventObserverPrx>> toNotify = new ArrayList<>(subscribers.entrySet());
+
+        for (Map.Entry<String, EventObserverPrx> entry : toNotify) {
+            String identity = entry.getKey();
+            EventObserverPrx observer = entry.getValue();
+            try {
+                observer._notify(event);
+                System.out.println("Successfully notified observer: " + identity);
+            } catch (com.zeroc.Ice.ObjectNotExistException | com.zeroc.Ice.CommunicatorDestroyedException e) {
+                System.err.println("Observer '" + identity + "' seems to be down. Removing: " + e.getMessage());
+                subscribers.remove(identity);
+            } catch (Exception e) {
+                System.err.println("Failed to notify observer '" + identity + "': " + e.getMessage());
+            }
+        }
     }
 
     private ElectionData convertElectionToElectionData(Election election) {
@@ -139,6 +209,13 @@ public class ServerImpl implements ServerService {
             citizen.getLastName(),
             citizen.getVotingTable().getId()
         );
+    }
+
+    @Override
+    public CandidateData[] getCandidates(Current current) {
+        return this.candidates.stream()
+            .map(this::convertCandidateToCandidateData)
+            .toList().toArray(new CandidateData[0]);
     }
 
     private CandidateData convertCandidateToCandidateData(Candidate candidate) {

@@ -88,3 +88,37 @@ VALUES ('Elección Municipal 2025', '2025-01-01 08:00:00', '2025-12-31 17:00:00'
 -- Permisos en la BD 'elections'
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE election, candidate, votes TO electuser;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO electuser;
+
+-- Insert test election data
+INSERT INTO elections (id, name, start_time, end_time, created_at, updated_at) VALUES 
+(1, 'Elección Municipal 2025', '2025-01-01 08:00:00', '2025-12-31 18:00:00', NOW(), NOW());
+
+-- Insert test candidates
+INSERT INTO candidates (id, first_name, last_name, party, election_id, created_at, updated_at) VALUES 
+(101, 'Ana', 'García', 'Partido Liberal', 1, NOW(), NOW()),
+(102, 'Carlos', 'López', 'Partido Conservador', 1, NOW(), NOW()),
+(103, 'María', 'Rodríguez', 'Partido Verde', 1, NOW(), NOW()),
+(104, 'José', 'Martínez', 'Partido Social', 1, NOW(), NOW());
+
+-- Insert test stations (control centers)
+INSERT INTO stations (id, name, address, created_at, updated_at) VALUES 
+(1, 'Estación Central', 'Calle Principal 123', NOW(), NOW()),
+(2, 'Estación Norte', 'Avenida Norte 456', NOW(), NOW());
+
+-- Insert test voting tables
+INSERT INTO voting_tables (id, station_id, created_at, updated_at) VALUES 
+(201, 1, NOW(), NOW()),
+(202, 1, NOW(), NOW()),
+(203, 2, NOW(), NOW());
+
+-- Insert test citizens
+INSERT INTO citizens (id, document, first_name, last_name, voting_table_id, created_at, updated_at) VALUES 
+(1, '12345678', 'Juan', 'Pérez', 201, NOW(), NOW()),
+(2, '87654321', 'Laura', 'González', 201, NOW(), NOW()),
+(3, '11223344', 'Pedro', 'Sánchez', 201, NOW(), NOW()),
+(4, '44332211', 'Sofía', 'Ruiz', 202, NOW(), NOW()),
+(5, '55667788', 'Miguel', 'Torres', 202, NOW(), NOW()),
+(6, '88776655', 'Carmen', 'Vargas', 203, NOW(), NOW());
+
+-- Insert initial vote count (optional, for testing)
+-- Note: Don't insert actual votes here as they should be created through the voting process

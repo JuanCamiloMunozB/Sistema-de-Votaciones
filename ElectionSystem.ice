@@ -39,10 +39,28 @@ module ElectionSystem {
         CandidateDataSeq candidates;
     }
 
+    enum EventType {
+        ElectionStarted,
+        ElectionEnded,
+        VoteRegistered
+    }
+    dictionary<string, string> EventPayload;
+    struct ElectionEvent {
+        EventType type;
+        string timestamp;
+        EventPayload details;
+    };
+    interface EventObserver {
+        void notify(ElectionEvent event);
+    };
+
     interface ServerService {
         ElectionData getElectionData(int controlCenterId);
         VotingTableDataSeq getVotingTablesFromStation(int controlCenterId);
         void registerVote(VoteData vote);
+        void subscribe(EventObserver* observer, string observerIdentity);
+        void unsubscribe(string observerIdentity);
+        CandidateDataSeq getCandidates();
     }
 
     interface ControlCenterService {
