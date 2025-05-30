@@ -20,16 +20,20 @@ public class ServerImpl implements ServerService {
     private final VotingTableRepository votingTableRepository;
 
     private Election currentElection;
-    private List<Candidate> candidates;
+    List<Candidate> candidates;
     private Map<Integer, List<VotingTable>> votingTablesByStation;
     private Map<Integer, List<Citizen>> citizensByTable;
     
-    public ServerImpl() {
-        this.electionRepository = new ElectionRepository();
-        this.candidateRepository = new CandidateRepository();
-        this.voteRepository = new VoteRepository();
-        this.citizenRepository = new CitizenRepository();
-        this.votingTableRepository = new VotingTableRepository();
+    public ServerImpl(ElectionRepository electionRepository, 
+                      CandidateRepository candidateRepository, 
+                      VoteRepository voteRepository, 
+                      CitizenRepository citizenRepository, 
+                      VotingTableRepository votingTableRepository) {
+        this.electionRepository = electionRepository;
+        this.candidateRepository = candidateRepository;
+        this.voteRepository = voteRepository;
+        this.citizenRepository = citizenRepository;
+        this.votingTableRepository = votingTableRepository;
         initElection();
     }
 
@@ -59,15 +63,31 @@ public class ServerImpl implements ServerService {
         }
         
         List<VotingTable> votingTables = votingTablesByStation.get(controlCenterId);
+        if (votingTables == null) {
+            return new VotingTableData[0];
+        }
         return votingTables.stream()
             .map(this::convertVotingTableToVotingTableData)
             .toArray(VotingTableData[]::new);
-
     }
 
     @Override
     public void registerVote(VoteData vote, Current current) {
-        Candidate candidate = candidates.stream()
+        if (this.candidates == null || this.votingTablesByStation == null || this.citizensByTable == null ) {
+            initElection();
+        }
+
+        if (voteRepository.hasVoted(vote.citizenId)) {
+            throw new RuntimeException("Citizen has already voted");
+        }
+
+        Citizen citizen = citizenRepository.findById(vote.citizenId)
+            .orElseThrow(() -> new RuntimeException("Citizen not found"));
+        if (citizen.getVotingTable().getId() != vote.tableId) {
+            throw new RuntimeException("Citizen does not belong to this voting table");
+        }
+        
+        Candidate candidate = this.candidates.stream()
             .filter(c -> c.getId() == vote.candidateId)
             .findFirst()
             .orElseThrow(() -> new RuntimeException("Candidate not found"));
@@ -76,9 +96,10 @@ public class ServerImpl implements ServerService {
             .flatMap(List::stream)
             .filter(table -> table.getId() == vote.tableId)
             .findFirst()
-            .orElseThrow(() -> new RuntimeException("Voting table not found"));
+            .orElseThrow(() -> new RuntimeException("Voting table not found in server context"));
 
         Vote newVote = new Vote();
+        newVote.setCitizenId(vote.citizenId);
         newVote.setCandidate(candidate);
         newVote.setTableId(votingTable.getId());
         newVote.setTimestamp(java.time.LocalDateTime.now());
@@ -91,16 +112,20 @@ public class ServerImpl implements ServerService {
             election.getName(),
             election.getStartTime().format(DateTimeFormatter.ISO_DATE_TIME),
             election.getEndTime().format(DateTimeFormatter.ISO_DATE_TIME),
-            candidates.stream()
+            this.candidates.stream()
                 .map(this::convertCandidateToCandidateData)
                 .toList().toArray(new CandidateData[0])
         );
     }
 
     private VotingTableData convertVotingTableToVotingTableData(VotingTable votingTable) {
+        List<Citizen> citizensInTable = citizensByTable.get(votingTable.getId());
+        if (citizensInTable == null) {
+            citizensInTable = new java.util.ArrayList<>();
+        }
         return new VotingTableData(
             votingTable.getId(),
-            citizensByTable.get(votingTable.getId()).stream()
+            citizensInTable.stream()
                 .map(this::convertCitizenToCitizenData)
                 .toList().toArray(new CitizenData[0])
         );

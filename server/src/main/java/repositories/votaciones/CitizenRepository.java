@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import jakarta.persistence.TypedQuery;
+
 public class CitizenRepository extends GenericRepository<Citizen, Integer> {
 
     public CitizenRepository() {
@@ -40,12 +42,26 @@ public class CitizenRepository extends GenericRepository<Citizen, Integer> {
 
     public Map<Integer, List<Citizen>> groupCitizensByVotingTable() {
         return JPAUtil.executeInTransaction(this.entityManager, entityManager -> {
-            String sql = "SELECT c.*, vt.id AS table_id FROM Citizen c JOIN VotingTable vt ON c.votingTable_id = vt.id";
-            @SuppressWarnings("unchecked")
-            List<Object[]> results = entityManager.createNativeQuery(sql, "CitizenWithTableIdMapping").getResultList();
-            return results.stream()
-                          .collect(Collectors.groupingBy(result -> (Integer) result[1],
-                                  Collectors.mapping(result -> (Citizen) result[0], Collectors.toList())));
+            // Usar JPQL para obtener los Citizen con sus VotingTable asociadas
+            String jpql = "SELECT c FROM Citizen c LEFT JOIN FETCH c.votingTable vt"; // LEFT JOIN FETCH si un ciudadano puede no tener mesa
+                                                                              // o JOIN FETCH si siempre tiene mesa.
+            TypedQuery<Citizen> query = entityManager.createQuery(jpql, Citizen.class);
+            List<Citizen> citizens = query.getResultList();
+
+            // Agrupar en Java
+            if (citizens == null) {
+                return new java.util.HashMap<>();
+            }
+            return citizens.stream()
+                .filter(citizen -> citizen.getVotingTable() != null && citizen.getVotingTable().getId() != null) // Solo agrupar si tiene mesa y la mesa tiene ID
+                .collect(Collectors.groupingBy(citizen -> {
+                    // Asumiendo que el ID de VotingTable es Long o Integer. Ajusta según tu entidad.
+                    // Si el ID de VotingTable es Long, el Map debe ser Map<Long, List<Citizen>>
+                    // y ServerImpl.java debe ajustarse para manejar esto o convertir las claves.
+                    // Aquí, para mantener la clave Integer:
+                    Number tableId = (Number) citizen.getVotingTable().getId();
+                    return tableId.intValue();
+                }));
         });
     }
     

@@ -10,6 +10,17 @@ public class VoteRepository extends GenericRepository<Vote, Integer> {
         super(JPAUtil.getEntityManagerElections(), Vote.class);
     }
 
+    public boolean hasVoted(int citizenId) {
+        return JPAUtil.executeInTransaction(this.entityManager, em -> {
+            Long count = em.createQuery(
+                "SELECT COUNT(v) FROM Vote v WHERE v.citizenId = :citizenId", 
+                Long.class)
+                .setParameter("citizenId", citizenId)
+                .getSingleResult();
+            return count > 0;
+        });
+    }
+
     public boolean hasVotedInElection(String citizenDocument, int electionId) {
         return JPAUtil.executeInTransaction(this.entityManager, em -> {
             Long count = em.createQuery(

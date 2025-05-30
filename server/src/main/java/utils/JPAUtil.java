@@ -50,7 +50,7 @@ public class JPAUtil {
 
             // EntityManagerFactory for Application DB (votos, candidatos, elecciones, etc)
             Map<String, String> electionProps = new HashMap<>(baseProperties);
-            electionProps.put("hibernate.hbm2ddl.auto", "create-drop");
+            electionProps.put("hibernate.hbm2ddl.auto", "update");
             electionProps.put("jakarta.persistence.jdbc.user", config.getProperty("database.elections.user"));
             electionProps.put("jakarta.persistence.jdbc.password", config.getProperty("database.elections.password"));
             electionProps.put("jakarta.persistence.jdbc.url", config.getProperty("database.elections.url"));

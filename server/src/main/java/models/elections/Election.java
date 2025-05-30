@@ -2,9 +2,7 @@ package models.elections;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "election")
@@ -15,13 +13,12 @@ public class Election {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
+    @Column(name = "name")
     private String name;
 
-    private LocalDate date;
-
+    @Column(name = "start_date")
     private LocalDateTime startTime;
-    private LocalDateTime endTime;
 
-    @OneToMany(mappedBy = "election", cascade = CascadeType.ALL)
-    private List<Candidate> candidates;
+    @Column(name = "end_date")
+    private LocalDateTime endTime;
 }

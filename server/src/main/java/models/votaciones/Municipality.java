@@ -3,7 +3,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 @Entity
-@Table(name = "municipio")
+@Table(name = "municipality")
 @Data
 public class Municipality {
 
@@ -11,11 +11,11 @@ public class Municipality {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "nombre")
+    @Column(name = "name")
     private String name;
 
     @ManyToOne
-    @JoinColumn(name = "departamento_id")
+    @JoinColumn(name = "department_id")
     private Department department;
 
 }

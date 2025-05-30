@@ -5,7 +5,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "vote")
+@Table(name = "votes")
 @Data
 public class Vote {
 
@@ -13,12 +13,20 @@ public class Vote {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "timestamp")
     private LocalDateTime timestamp;
 
     @ManyToOne
     @JoinColumn(name = "candidate_id")
     private Candidate candidate;
 
+    @ManyToOne
+    @JoinColumn(name = "election_id")
+    private Election election;
+
     @Column(name = "table_id")
     private Integer tableId;
+
+    @Column(name = "citizen_id")
+    private Integer citizenId;
 }

@@ -1,0 +1,51 @@
+<icegrid>
+    <application name="ElectionSystemApp">
+        <server-template id="VotingTableTemplate">
+            <parameter name="TABLE_ID"/> <!-- El parámetro se define aquí -->
+            <server id="VotingTableService-${TABLE_ID}"
+                    exe="java"
+                    activation="on-demand">
+                <option>-cp</option>
+                <option>C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\voting_table\build\classes\java\main;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\voting_table\build\libs\*;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\ice-3.7.9.jar;...</option>
+                <option>-DVOTING_TABLE_ID=${TABLE_ID}</option> 
+                <option>VotingTableMain</option>
+                <property name="Ice.Config" value="C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\voting_table\src\main\resources\config.votetable.cfg"/>
+                <adapter name="VotingTableAdapter" id="VotingTableAdapter-${TABLE_ID}">
+                    <object identity="VotingTableService-${TABLE_ID}" type="::ElectionSystem::VotingTableService"/>
+                </adapter>
+            </server>
+        </server-template>
+
+        <node name="Node1">
+            
+            <server id="ServerServiceInstance1"
+                    exe="java"
+                    activation="on-demand" 
+                    application-distrib="false"> 
+                <option>-cp</option>
+                <option>C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\server\build\classes\java\main;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\server\build\libs\*;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\ice-3.7.9.jar;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\postgresql-42.7.3.jar;...</option>
+                <option>ServerMain</option> 
+                <property name="Ice.Config" value="C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\server\src\main\resources\config.server.cfg"/>
+                <adapter name="ServerAdapter" id="ServerAdapterID">
+                    <object identity="ServerService" type="::ElectionSystem::ServerService"/>
+                </adapter>
+            </server>
+
+            <server id="ControlCenterServiceInstance1"
+                    exe="java"
+                    activation="on-demand">
+                <option>-cp</option>
+                <option>C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\control_center\build\classes\java\main;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\control_center\build\libs\*;C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\jar-files\ice-3.7.9.jar;...</option>
+                <option>ControlCenterMain</option>
+                <property name="Ice.Config" value="C:\Users\alejo\OneDrive\Documents\GitHub\Sistema-de-Votaciones\control_center\src\main\resources\config.control.cfg"/>
+                <adapter name="ControlCenterAdapter" id="ControlCenterAdapterID">
+                    <object identity="ControlCenterService" type="::ElectionSystem::ControlCenterService"/>
+                </adapter>
+            </server>
+
+            <server-instance template="VotingTableTemplate" TABLE_ID="Table1"/>
+            <server-instance template="VotingTableTemplate" TABLE_ID="Table2"/>
+
+        </node>
+    </application>
+</icegrid>

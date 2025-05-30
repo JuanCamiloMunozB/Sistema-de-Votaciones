@@ -2,11 +2,12 @@ package repositories.votaciones;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import jakarta.persistence.TypedQuery;
 import models.votaciones.VotingTable;
 import repositories.GenericRepository;
 import utils.JPAUtil;
-import java.util.stream.Collectors;
 
 public class VotingTableRepository extends GenericRepository<VotingTable, Integer> {
 
@@ -25,12 +26,22 @@ public class VotingTableRepository extends GenericRepository<VotingTable, Intege
 
     public Map<Integer, List<VotingTable>> groupVotingTablesByStation(){
         return JPAUtil.executeInTransaction(this.entityManager, entityManager -> {
-            String sql = "SELECT vt.*, vs.id AS station_id FROM VotingTable vt JOIN VotingStation vs ON vt.votingStation_id = vs.id";
-            @SuppressWarnings("unchecked")
-            List<Object[]> results = entityManager.createNativeQuery(sql, "VotingTableWithStationIdMapping").getResultList();
-            return results.stream()
-                          .collect(Collectors.groupingBy(result -> (Integer) result[1],
-                                 Collectors.mapping(result -> (VotingTable) result[0], Collectors.toList())));
+            String jpql = "SELECT vt FROM VotingTable vt JOIN FETCH vt.votingStation vs";
+            TypedQuery<VotingTable> query = entityManager.createQuery(jpql, VotingTable.class);
+            List<VotingTable> tables = query.getResultList();
+
+            if (tables == null) {
+                return new java.util.HashMap<>();
+            }
+            return tables.stream()
+                         .collect(Collectors.groupingBy(table -> {
+                             if (table.getVotingStation() != null && table.getVotingStation().getId() != null) {
+                                 Number stationId = (Number) table.getVotingStation().getId();
+                                 return stationId.intValue();
+                             } else {
+                                 return -1;
+                             }
+                         }));
         });
     }
     
