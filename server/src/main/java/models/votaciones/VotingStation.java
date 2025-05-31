@@ -3,7 +3,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 @Entity
-@Table(name = "voting_station")
+@Table(name = "puesto_votacion")
 @Data
 public class VotingStation {
 
@@ -11,14 +11,17 @@ public class VotingStation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "name")
+    @Column(name = "nombre")
     private String name;
 
-    @Column(name = "address")
+    @Column(name = "consecutive")
+    private Integer consecutive;
+
+    @Column(name = "direccion")
     private String address;
 
     @ManyToOne
-    @JoinColumn(name = "municipality_id")
+    @JoinColumn(name = "municipio_id")
     private Municipality municipality;
 
 }
