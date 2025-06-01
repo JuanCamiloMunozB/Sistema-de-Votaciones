@@ -23,7 +23,6 @@ import ElectionSystem.CitizenNotBelongToTable;
 import ElectionSystem.ElectionInactive;
 
 public class ControlCenterImpl implements ControlCenterService {
-    // ... (campos como antes)
     private ServerServicePrx serverService;
     private String controlCenterId;
     private ObjectAdapter adapter;
@@ -33,7 +32,6 @@ public class ControlCenterImpl implements ControlCenterService {
     private EventObserverI observerServant;
     private final Map<String, ElectionActivityObserverPrx> electionActivitySubscribers = new ConcurrentHashMap<>();
 
-    // ... (constructor como antes)
     public ControlCenterImpl(ServerServicePrx serverService, String controlCenterId, ObjectAdapter adapter) {
         this.serverService = serverService;
         this.controlCenterId = controlCenterId;
