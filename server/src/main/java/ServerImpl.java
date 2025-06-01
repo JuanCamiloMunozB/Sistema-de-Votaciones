@@ -155,7 +155,7 @@ public class ServerImpl implements ServerService {
 
         Vote newVoteToSave = new Vote();
         newVoteToSave.setCandidate(candidateEntity);
-        newVoteToSave.setTableId(vote.tableId)
+        newVoteToSave.setTableId(vote.tableId);
         newVoteToSave.setTimestamp(java.time.LocalDateTime.now());
         if (this.currentElection != null) {
             newVoteToSave.setElection(this.currentElection);
