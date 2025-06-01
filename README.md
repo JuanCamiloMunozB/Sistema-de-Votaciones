@@ -15,6 +15,6 @@ Step 4: Run the IceGrid node
 On the same terminal as Step 3
 icegridnode --Ice.Config=config.icegrid
 
-Step 4: Run the IceGrid registry
+Step 5: Run the VotingTable servers
 In another terminal (now you have three terminals open)
 java -DVOTING_TABLE_ID=3 -cp "voting_table/build/classes/java/main;jar-files/ice-3.7.9.jar;." VotingTableMain
