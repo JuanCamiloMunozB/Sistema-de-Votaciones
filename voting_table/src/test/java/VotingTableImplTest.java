@@ -1,9 +1,10 @@
 import ElectionSystem.ControlCenterServicePrx;
 import ElectionSystem.VoteData;
+import ElectionSystem.ElectionInactive;
+import ElectionSystem.CitizenAlreadyVoted;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -19,39 +20,44 @@ class VotingTableImplTest {
     @Mock
     private com.zeroc.Ice.Current current; // Mock de Current
 
-    @InjectMocks
     private VotingTableImpl votingTableImpl;
+    private String testTableId = "TestTable1"; // ID para la mesa de prueba
+    private final String SAMPLE_CITIZEN_DOCUMENT_VT = "DOC_TEST_VT"; // Documento para VoteData
 
     private VoteData sampleVoteData;
 
     @BeforeEach
     void setUp() {
-        sampleVoteData = new VoteData(1, 101, 201, "test-ts-vt");
-        // votingTableImpl se inyecta con el mock de controlCenterServicePrx automáticamente
+        sampleVoteData = new VoteData(SAMPLE_CITIZEN_DOCUMENT_VT, 101, 201, "test-ts-vt");
+        votingTableImpl = new VotingTableImpl(controlCenterServicePrx, testTableId);
+        votingTableImpl.electionStarted(null); 
     }
 
     @Test
-    void emitVote_success_callsControlCenterSubmitVote() {
-        // No se simula ninguna excepción en controlCenterServicePrx.submitVote()
-        // para probar el caso exitoso.
+    void emitVote_success_callsControlCenterSubmitVote() throws Exception {
         assertDoesNotThrow(() -> votingTableImpl.emitVote(sampleVoteData, current));
-
-        // Verificar que submitVote fue llamado una vez con los datos correctos
         verify(controlCenterServicePrx, times(1)).submitVote(sampleVoteData);
     }
 
     @Test
-    void emitVote_controlCenterThrowsException_rethrowsException() {
-        // Simular que el ControlCenter lanza una excepción
-        RuntimeException expectedException = new RuntimeException("Control Center Error");
+    void emitVote_controlCenterThrowsException_rethrowsException() throws Exception {
+        CitizenAlreadyVoted expectedException = new CitizenAlreadyVoted("Citizen already voted via Control Center");
         doThrow(expectedException).when(controlCenterServicePrx).submitVote(sampleVoteData);
 
-        // Verificar que la misma excepción es relanzada por emitVote
-        RuntimeException actualException = assertThrows(RuntimeException.class, () -> {
+        CitizenAlreadyVoted actualException = assertThrows(CitizenAlreadyVoted.class, () -> {
             votingTableImpl.emitVote(sampleVoteData, current);
         });
 
-        assertSame(expectedException, actualException, "Should rethrow the exception from Control Center");
+        assertSame(expectedException, actualException, "Should rethrow the specific exception from Control Center");
         verify(controlCenterServicePrx, times(1)).submitVote(sampleVoteData);
+    }
+
+    @Test
+    void emitVote_electionNotActive_throwsElectionInactive() throws Exception {
+        VotingTableImpl tableForInactiveTest = new VotingTableImpl(controlCenterServicePrx, testTableId + "_inactive");
+        assertThrows(ElectionInactive.class, () -> {
+            tableForInactiveTest.emitVote(sampleVoteData, current);
+        });
+        verify(controlCenterServicePrx, never()).submitVote(any(VoteData.class));
     }
 }

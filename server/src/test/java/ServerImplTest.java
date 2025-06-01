@@ -1,8 +1,7 @@
 import ElectionSystem.*;
 import com.zeroc.Ice.Current;
-import models.elections.Candidate;
-import models.elections.Election;
-import models.elections.Vote;
+import models.elections.*;
+import models.elections.VotedCitizen;
 import models.votaciones.Citizen;
 import models.votaciones.VotingTable;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import repositories.elections.CandidateRepository;
 import repositories.elections.ElectionRepository;
 import repositories.elections.VoteRepository;
+import repositories.elections.VotedCitizenRepository;
 import repositories.votaciones.CitizenRepository;
 import repositories.votaciones.VotingTableRepository;
 
@@ -40,6 +40,8 @@ class ServerImplTest {
     @Mock
     private VotingTableRepository votingTableRepository;
     @Mock
+    private VotedCitizenRepository votedCitizenRepository;
+    @Mock
     private Current current;
 
     private ServerImpl serverImpl;
@@ -47,10 +49,16 @@ class ServerImplTest {
     private Election currentElection;
     private List<Candidate> candidates;
     private Map<Integer, List<VotingTable>> votingTablesByStationMapSetup;
-    private Map<Integer, List<Citizen>> citizensByTableMapSetup;
+
+    private Citizen sampleCitizen;
+    private VotingTable sampleVotingTable;
+    private final String SAMPLE_CITIZEN_DOCUMENT = "DOC001";
+    private final int SAMPLE_CITIZEN_ID = 1;
+    private final int SAMPLE_TABLE_ID = 201;
+    private final int SAMPLE_CANDIDATE_ID = 101;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         currentElection = new Election();
         currentElection.setId(1);
         currentElection.setName("Test Election");
@@ -59,119 +67,111 @@ class ServerImplTest {
 
         candidates = new ArrayList<>();
         Candidate candidate1 = new Candidate();
-        candidate1.setId(101);
+        candidate1.setId(SAMPLE_CANDIDATE_ID);
         candidate1.setFirstName("CandidateA");
         candidate1.setLastName("Test");
         candidate1.setParty("PartyX");
         candidate1.setElection(currentElection);
         candidates.add(candidate1);
 
-        VotingTable table201 = new VotingTable();
-        table201.setId(201);
+        sampleVotingTable = new VotingTable();
+        sampleVotingTable.setId(SAMPLE_TABLE_ID);
 
         votingTablesByStationMapSetup = new HashMap<>();
         List<VotingTable> tablesForStationKey1 = new ArrayList<>();
-        tablesForStationKey1.add(table201);
-        votingTablesByStationMapSetup.put(1, tablesForStationKey1);
+        tablesForStationKey1.add(sampleVotingTable);
+        votingTablesByStationMapSetup.put(1, tablesForStationKey1); // Asumiendo que la estación es 1
 
-        Citizen citizen1 = new Citizen();
-        citizen1.setId(1);
-        citizen1.setVotingTable(table201);
-
-        citizensByTableMapSetup = new HashMap<>();
-        List<Citizen> citizensForTable201 = new ArrayList<>();
-        citizensForTable201.add(citizen1);
-        citizensByTableMapSetup.put(201, citizensForTable201);
+        sampleCitizen = new Citizen();
+        sampleCitizen.setId(SAMPLE_CITIZEN_ID);
+        sampleCitizen.setDocument(SAMPLE_CITIZEN_DOCUMENT);
+        sampleCitizen.setVotingTable(sampleVotingTable);
 
         when(electionRepository.findCurrentElection()).thenReturn(Optional.of(currentElection));
         when(candidateRepository.findCandidatesByElectionId(currentElection.getId())).thenReturn(candidates);
         when(votingTableRepository.groupVotingTablesByStation()).thenReturn(votingTablesByStationMapSetup);
-        when(citizenRepository.groupCitizensByVotingTable()).thenReturn(citizensByTableMapSetup);
 
-        serverImpl = new ServerImpl(electionRepository, candidateRepository, voteRepository, citizenRepository, votingTableRepository);
+        serverImpl = new ServerImpl(electionRepository, candidateRepository, voteRepository, citizenRepository, votingTableRepository, votedCitizenRepository);
     }
 
     @Test
-    void registerVote_Successful() {
-        VoteData voteData = new VoteData(1, 101, 201, "ts");
-
-        Citizen citizenFromRepo = new Citizen();
-        citizenFromRepo.setId(1);
-        VotingTable citizenVotingTable = new VotingTable();
-        citizenVotingTable.setId(201);
-        citizenFromRepo.setVotingTable(citizenVotingTable);
+    void registerVote_Successful() throws Exception {
+        VoteData voteData = new VoteData(SAMPLE_CITIZEN_DOCUMENT, SAMPLE_CANDIDATE_ID, SAMPLE_TABLE_ID, "ts");
         
-        when(voteRepository.hasVoted(voteData.citizenId)).thenReturn(false);
-        when(citizenRepository.findById(voteData.citizenId)).thenReturn(Optional.of(citizenFromRepo));
+        when(citizenRepository.findByDocument(SAMPLE_CITIZEN_DOCUMENT)).thenReturn(Optional.of(sampleCitizen));
+        when(votedCitizenRepository.existsById(SAMPLE_CITIZEN_ID)).thenReturn(false);
 
-        assertDoesNotThrow(() -> serverImpl.registerVote(voteData, current), 
-            "El voto debería registrarse sin excepción. Verificar que la mesa " + voteData.tableId + " existe en el contexto del servidor.");
+        assertDoesNotThrow(() -> serverImpl.registerVote(voteData, current));
         
         verify(voteRepository).save(any(Vote.class));
+        verify(votedCitizenRepository).save(new VotedCitizen(SAMPLE_CITIZEN_ID));
     }
 
     @Test
-    void registerVote_CitizenAlreadyVoted_ShouldThrowException() {
-        VoteData voteData = new VoteData(1, 101, 201, "ts");
-        when(voteRepository.hasVoted(voteData.citizenId)).thenReturn(true);
+    void registerVote_CitizenAlreadyVoted_ShouldThrowException() throws Exception {
+        VoteData voteData = new VoteData(SAMPLE_CITIZEN_DOCUMENT, SAMPLE_CANDIDATE_ID, SAMPLE_TABLE_ID, "ts");
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+        when(citizenRepository.findByDocument(SAMPLE_CITIZEN_DOCUMENT)).thenReturn(Optional.of(sampleCitizen));
+        when(votedCitizenRepository.existsById(SAMPLE_CITIZEN_ID)).thenReturn(true);
+
+        CitizenAlreadyVoted exception = assertThrows(CitizenAlreadyVoted.class, () -> {
             serverImpl.registerVote(voteData, current);
         });
-        assertEquals("Citizen has already voted", exception.getMessage());
+        assertEquals("Citizen with document " + SAMPLE_CITIZEN_DOCUMENT + " (ID: " + SAMPLE_CITIZEN_ID + ") has already voted", exception.reason);
         verify(voteRepository, never()).save(any());
+        verify(votedCitizenRepository, never()).save(any(VotedCitizen.class));
     }
 
     @Test
-    void registerVote_CitizenNotFound_ShouldThrowException() {
-        VoteData voteData = new VoteData(1, 101, 201, "ts");
-        when(voteRepository.hasVoted(voteData.citizenId)).thenReturn(false);
-        when(citizenRepository.findById(voteData.citizenId)).thenReturn(Optional.empty());
-
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            serverImpl.registerVote(voteData, current);
-        });
-        assertEquals("Citizen not found", exception.getMessage());
-        verify(voteRepository, never()).save(any());
-    }
-
-    @Test
-    void registerVote_CitizenDoesNotBelongToTable_ShouldThrowException() {
-        VoteData voteData = new VoteData(1, 101, 201, "ts");
+    void registerVote_CitizenNotFound_ShouldThrowException() throws Exception {
+        VoteData voteData = new VoteData(SAMPLE_CITIZEN_DOCUMENT, SAMPLE_CANDIDATE_ID, SAMPLE_TABLE_ID, "ts");
         
-        Citizen citizenFromRepo = new Citizen();
-        citizenFromRepo.setId(1);
+        when(citizenRepository.findByDocument(SAMPLE_CITIZEN_DOCUMENT)).thenReturn(Optional.empty());
+
+        CitizenNotFound exception = assertThrows(CitizenNotFound.class, () -> {
+            serverImpl.registerVote(voteData, current);
+        });
+        assertEquals("Citizen with document " + SAMPLE_CITIZEN_DOCUMENT + " not found", exception.reason);
+        verify(voteRepository, never()).save(any());
+        verify(votedCitizenRepository, never()).save(any(VotedCitizen.class));
+        verify(votedCitizenRepository, never()).existsById(anyInt());
+    }
+
+    @Test
+    void registerVote_CitizenDoesNotBelongToTable_ShouldThrowException() throws Exception {
+        VoteData voteData = new VoteData(SAMPLE_CITIZEN_DOCUMENT, SAMPLE_CANDIDATE_ID, SAMPLE_TABLE_ID, "ts");
+        
+        Citizen citizenFromWrongTable = new Citizen();
+        citizenFromWrongTable.setId(SAMPLE_CITIZEN_ID);
+        citizenFromWrongTable.setDocument(SAMPLE_CITIZEN_DOCUMENT);
         VotingTable differentVotingTable = new VotingTable();
         differentVotingTable.setId(999);
-        citizenFromRepo.setVotingTable(differentVotingTable);
+        citizenFromWrongTable.setVotingTable(differentVotingTable);
 
-        when(voteRepository.hasVoted(voteData.citizenId)).thenReturn(false);
-        when(citizenRepository.findById(voteData.citizenId)).thenReturn(Optional.of(citizenFromRepo));
+        when(citizenRepository.findByDocument(SAMPLE_CITIZEN_DOCUMENT)).thenReturn(Optional.of(citizenFromWrongTable));
+        when(votedCitizenRepository.existsById(SAMPLE_CITIZEN_ID)).thenReturn(false);
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+        CitizenNotBelongToTable exception = assertThrows(CitizenNotBelongToTable.class, () -> {
             serverImpl.registerVote(voteData, current);
         });
-        assertEquals("Citizen does not belong to this voting table", exception.getMessage());
+        assertEquals("Citizen with document " + SAMPLE_CITIZEN_DOCUMENT + " (ID: " + SAMPLE_CITIZEN_ID + ") does not belong to voting table " + SAMPLE_TABLE_ID, exception.reason);
         verify(voteRepository, never()).save(any());
+        verify(votedCitizenRepository, never()).save(any(VotedCitizen.class));
     }
 
     @Test
-    void registerVote_CandidateNotFound_ShouldThrowException() {
-        VoteData voteData = new VoteData(1, 999, 201, "ts");
+    void registerVote_CandidateNotFound_ShouldThrowException() throws Exception {
+        int nonExistentCandidateId = 999;
+        VoteData voteData = new VoteData(SAMPLE_CITIZEN_DOCUMENT, nonExistentCandidateId, SAMPLE_TABLE_ID, "ts");
         
-        Citizen citizenFromRepo = new Citizen();
-        citizenFromRepo.setId(1);
-        VotingTable citizenVotingTable = new VotingTable();
-        citizenVotingTable.setId(201);
-        citizenFromRepo.setVotingTable(citizenVotingTable);
-
-        when(voteRepository.hasVoted(voteData.citizenId)).thenReturn(false);
-        when(citizenRepository.findById(voteData.citizenId)).thenReturn(Optional.of(citizenFromRepo));
+        when(citizenRepository.findByDocument(SAMPLE_CITIZEN_DOCUMENT)).thenReturn(Optional.of(sampleCitizen));
+        when(votedCitizenRepository.existsById(SAMPLE_CITIZEN_ID)).thenReturn(false);
         
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+        CandidateNotFound exception = assertThrows(CandidateNotFound.class, () -> {
             serverImpl.registerVote(voteData, current);
         });
-        assertEquals("Candidate not found", exception.getMessage());
+        assertEquals("Candidate with ID " + nonExistentCandidateId + " not found", exception.reason);
         verify(voteRepository, never()).save(any());
+        verify(votedCitizenRepository, never()).save(any(VotedCitizen.class));
     }
 } 

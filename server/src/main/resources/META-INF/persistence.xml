@@ -25,6 +25,7 @@
         <class>models.elections.Election</class>
         <class>models.elections.Candidate</class>
         <class>models.elections.Vote</class>
+        <class>models.elections.VotedCitizen</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <properties>
             <!-- propiedades de conexión se pasan desde código -->

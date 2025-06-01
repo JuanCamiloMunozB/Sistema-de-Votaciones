@@ -5,45 +5,45 @@ import com.zeroc.Ice.Util;
 import utils.JPAUtil;
 import repositories.elections.*;
 import repositories.votaciones.*;
+import repositories.elections.VotedCitizenRepository;
 
 public class ServerMain {
     
     public static void main(String[] args) {
-        Communicator communicator = null; // Declarar fuera para que esté disponible en finally
+        Communicator communicator = null;
         try {
             communicator = Util.initialize(args, "config.server.cfg");
-            JPAUtil.initialize(communicator); // Corregido: pasar el comunicador
+            System.out.println("ServerMain: Initializing JPAUtil...");
+            JPAUtil.initialize(communicator);
+            System.out.println("ServerMain: JPAUtil initialized.");
 
-            // El adaptador debe tener un nombre que IceGrid conozca, o IceGrid asignará uno.
-            // Si el descriptor de IceGrid especifica <adapter name="ServerAdapter" ...>, usa ese nombre.
-            // Si no, IceGrid podría usar un nombre por defecto o uno basado en la identidad del servidor.
-            // Para el enfoque donde el servidor crea su propio adaptador y IceGrid lo descubre/gestiona indirectamente:
-            ObjectAdapter adapter = communicator.createObjectAdapter("ServerAdapter"); // Usar un nombre de adaptador consistente.
+            System.out.println("ServerMain: Creating ObjectAdapter 'ServerAdapter'...");
+            ObjectAdapter adapter = communicator.createObjectAdapter("ServerAdapter");
+            System.out.println("ServerMain: ObjectAdapter 'ServerAdapter' created.");
 
             ElectionRepository electionRepository = new ElectionRepository();
             CandidateRepository candidateRepository = new CandidateRepository();
             VoteRepository voteRepository = new VoteRepository();
             CitizenRepository citizenRepository = new CitizenRepository();
             VotingTableRepository votingTableRepository = new VotingTableRepository();
+            VotedCitizenRepository votedCitizenRepository = new VotedCitizenRepository();
 
-            adapter.add(new ServerImpl(electionRepository, candidateRepository, voteRepository, citizenRepository, votingTableRepository), 
-                        Util.stringToIdentity("ServerService")); // Esta es la identidad lógica que los clientes usarán.
-            
+            System.out.println("ServerMain: Adding ServerImpl to adapter with identity 'ServerService'...");
+            adapter.add(new ServerImpl(electionRepository, candidateRepository, voteRepository, citizenRepository, votingTableRepository, votedCitizenRepository), 
+                        Util.stringToIdentity("ServerService"));
+            System.out.println("ServerMain: ServerImpl added to adapter.");
+
+
+            System.out.println("ServerMain: Activating adapter 'ServerAdapter'...");
             adapter.activate();
+            System.out.println("ServerMain: Adapter 'ServerAdapter' activated.");
             System.out.println("ServerService ready and registered with adapter ServerAdapter.");
-
-            // Opcional: Notificar a IceGrid que el servidor está listo (si no usa replicación gestionada por IceGrid)
-            // QueryPrx iceGridQuery = QueryPrx.checkedCast(communicator.stringToProxy("IceGrid/Query"));
-            // if (iceGridQuery != null) {
-            //     iceGridQuery.addObjectWithType(Util.stringToIdentity("ServerService"), "::ElectionSystem::ServerService");
-            //     System.out.println("ServerService identity published to IceGrid/Query (simple registration).");
-            // }
             
             communicator.waitForShutdown();
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (Throwable t) {
+            System.err.println("ServerMain: CRITICAL ERROR during startup or execution: " + t.getMessage());
         } finally {
-            if (communicator != null) { // Asegurar que el comunicador fue inicializado
+            if (communicator != null) {
                  JPAUtil.shutdown(); 
             }
         }

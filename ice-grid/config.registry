@@ -1,0 +1,14 @@
+# --- Endpoints para el Registry ---
+IceGrid.Registry.Client.Endpoints=tcp -h localhost -p 40620
+IceGrid.Registry.Server.Endpoints=tcp -h localhost -p 40610
+IceGrid.Registry.Internal.Endpoints=tcp -h localhost -p 40630
+
+# --- Base de Datos de IceGrid (Usando LMDB) ---
+IceGrid.Registry.LMDB.Path=db/registry 
+
+# Verificador de permisos
+IceGrid.Registry.PermissionsVerifier=IceGrid/NullPermissionsVerifier
+IceGrid.Registry.AdminPermissionsVerifier=IceGrid/NullPermissionsVerifier
+
+# Propiedades de Logging y Diagnóstico ---
+Ice.Warn.Connections=1

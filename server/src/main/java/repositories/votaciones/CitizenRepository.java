@@ -1,17 +1,20 @@
 package repositories.votaciones;
 
 import models.votaciones.Citizen;
+import models.votaciones.VotingTable;
 import repositories.GenericRepository;
 import utils.JPAUtil;
 
+import jakarta.persistence.TypedQuery;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
-
-import jakarta.persistence.TypedQuery;
 
 public class CitizenRepository extends GenericRepository<Citizen, Integer> {
+
+    private static final int PAGE_SIZE = 1000;
 
     public CitizenRepository() {
         super(JPAUtil.getEntityManagerVoting(), Citizen.class);
@@ -19,15 +22,10 @@ public class CitizenRepository extends GenericRepository<Citizen, Integer> {
 
     public Optional<Citizen> findByDocument(String document) {
         return JPAUtil.executeInTransaction(this.entityManager, entityManager -> {
-            String jpql = "SELECT c FROM Citizen c WHERE c.document = :document";
-            try {
-                Citizen citizen = entityManager.createQuery(jpql, Citizen.class)
-                                                .setParameter("document", document)
-                                                .getSingleResult();
-                return Optional.of(citizen);
-            } catch (Exception e) {
-                return Optional.empty();
-            }
+            TypedQuery<Citizen> query = entityManager.createQuery(
+                "SELECT c FROM Citizen c WHERE c.document = :document", Citizen.class);
+            query.setParameter("document", document);
+            return query.getResultStream().findFirst();
         });
     }
 
@@ -40,28 +38,41 @@ public class CitizenRepository extends GenericRepository<Citizen, Integer> {
         });
     }
 
-    public Map<Integer, List<Citizen>> groupCitizensByVotingTable() {
+    public Map<VotingTable, List<Citizen>> groupCitizensByVotingTable() {
         return JPAUtil.executeInTransaction(this.entityManager, entityManager -> {
-            // Usar JPQL para obtener los Citizen con sus VotingTable asociadas
-            String jpql = "SELECT c FROM Citizen c LEFT JOIN FETCH c.votingTable vt"; // LEFT JOIN FETCH si un ciudadano puede no tener mesa
-                                                                              // o JOIN FETCH si siempre tiene mesa.
-            TypedQuery<Citizen> query = entityManager.createQuery(jpql, Citizen.class);
-            List<Citizen> citizens = query.getResultList();
+            Map<VotingTable, List<Citizen>> citizensByTable = new HashMap<>();
 
-            // Agrupar en Java
-            if (citizens == null) {
-                return new java.util.HashMap<>();
+            TypedQuery<VotingTable> tablesQuery = entityManager.createQuery("SELECT vt FROM VotingTable vt", VotingTable.class);
+            List<VotingTable> allVotingTables = tablesQuery.getResultList();
+            System.out.println("[CitizenRepository] Total voting tables found: " + allVotingTables.size());
+
+            for (VotingTable table : allVotingTables) {
+                System.out.println("[CitizenRepository] Processing citizens for table ID: " + table.getId() + ", Consecutive: " + table.getConsecutive());
+                List<Citizen> citizensForCurrentTable = new ArrayList<>();
+                int pageNumber = 0;
+                List<Citizen> pageResults;
+
+                do {
+                    TypedQuery<Citizen> citizenQuery = entityManager.createQuery(
+                        "SELECT c FROM Citizen c WHERE c.votingTable = :table", Citizen.class);
+                    citizenQuery.setParameter("table", table);
+                    citizenQuery.setFirstResult(pageNumber * PAGE_SIZE);
+                    citizenQuery.setMaxResults(PAGE_SIZE);
+                    pageResults = citizenQuery.getResultList();
+
+                    citizensForCurrentTable.addAll(pageResults);
+                    pageNumber++;
+                    System.out.println("[CitizenRepository] Loaded " + pageResults.size() + " citizens for table ID " + table.getId() + " (page " + (pageNumber-1) + ")");
+                } while (!pageResults.isEmpty() && pageResults.size() == PAGE_SIZE);
+                if (!citizensForCurrentTable.isEmpty()) {
+                    citizensByTable.put(table, citizensForCurrentTable);
+                    System.out.println("[CitizenRepository] Total citizens for table ID " + table.getId() + ": " + citizensForCurrentTable.size());
+                } else {
+                    System.out.println("[CitizenRepository] No citizens found for table ID " + table.getId());
+                }
             }
-            return citizens.stream()
-                .filter(citizen -> citizen.getVotingTable() != null && citizen.getVotingTable().getId() != null) // Solo agrupar si tiene mesa y la mesa tiene ID
-                .collect(Collectors.groupingBy(citizen -> {
-                    // Asumiendo que el ID de VotingTable es Long o Integer. Ajusta según tu entidad.
-                    // Si el ID de VotingTable es Long, el Map debe ser Map<Long, List<Citizen>>
-                    // y ServerImpl.java debe ajustarse para manejar esto o convertir las claves.
-                    // Aquí, para mantener la clave Integer:
-                    Number tableId = (Number) citizen.getVotingTable().getId();
-                    return tableId.intValue();
-                }));
+            System.out.println("[CitizenRepository] Finished grouping citizens. Tables with citizens: " + citizensByTable.size());
+            return citizensByTable;
         });
     }
     

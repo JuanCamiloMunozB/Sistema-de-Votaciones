@@ -16,7 +16,7 @@ module ElectionSystem {
     }
 
     struct VoteData {
-        int citizenId;
+        string citizenDocument;
         int candidateId;
         int tableId;
         string timestamp;
@@ -50,14 +50,40 @@ module ElectionSystem {
         string timestamp;
         EventPayload details;
     };
+    
     interface EventObserver {
         void notify(ElectionEvent event);
+    };
+
+    interface ElectionActivityObserver {
+        void electionStarted();
+        void electionEnded();
+    };
+
+    exception ElectionInactive {
+        string reason;
+    };
+
+    exception CitizenAlreadyVoted {
+        string reason;
+    };
+
+    exception CitizenNotFound {
+        string reason;
+    };
+
+    exception CandidateNotFound {
+        string reason;
+    };
+
+    exception CitizenNotBelongToTable {
+        string reason;
     };
 
     interface ServerService {
         ElectionData getElectionData(int controlCenterId);
         VotingTableDataSeq getVotingTablesFromStation(int controlCenterId);
-        void registerVote(VoteData vote);
+        void registerVote(VoteData vote) throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable;
         void subscribe(EventObserver* observer, string observerIdentity);
         void unsubscribe(string observerIdentity);
         CandidateDataSeq getCandidates();
@@ -68,10 +94,15 @@ module ElectionSystem {
         CandidateDataSeq getCandidates();
         void startElection();
         void endElection();
-        void submitVote(VoteData vote);
+        void submitVote(VoteData vote) throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable, ElectionInactive;
+        void subscribeElectionActivity(ElectionActivityObserver* observer, string votingTableIdentity);
+        void unsubscribeElectionActivity(string votingTableIdentity);
     }
 
     interface VotingTableService {
-        void emitVote(VoteData vote);
+        void emitVote(VoteData vote) throws ElectionInactive, CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable;
+    }
+
+    interface VotingTableCombinedService extends VotingTableService, ElectionActivityObserver {
     }
 }

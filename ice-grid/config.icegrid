@@ -1,32 +1,11 @@
-# 1. Nombre de la Instancia de IceGrid
-IceGrid.InstanceName=MyElectionGrid
+# --- Conexión al IceGrid Registry ---
+Ice.Default.Locator=IceGrid/Locator:tcp -h localhost -p 40620
 
-# 2. Configuración del Locator (Cómo los clientes encuentran esta instancia de IceGrid)
-Ice.Default.Locator=MyElectionGrid/Locator:tcp -h localhost -p 40620
+# --- Endpoints del Nodo ---
+IceGrid.Node.Endpoints=tcp -h localhost -p 40600
 
-# 3. Configuración del Registry (que correrá dentro del proceso del nodo)
-IceGrid.Registry.Client.Endpoints=tcp -p 40620
-IceGrid.Registry.Internal.Endpoints=tcp -p 40630 
-IceGrid.Registry.Server.Endpoints=tcp -p 40610
+# --- Datos del Nodo ---
+IceGrid.Node.Data=db/node1
 
-#    Ruta para la base de datos del Registry
-IceGrid.Registry.LMDB.Path=C:/icegrid_data/registry_collocated 
-
-#    Permisos (Null para desarrollo)
-IceGrid.Registry.PermissionsVerifier=MyElectionGrid/NullPermissionsVerifier
-IceGrid.Registry.AdminPermissionsVerifier=MyElectionGrid/NullPermissionsVerifier
-
-#    Nombre de la réplica (maestro por defecto)
-IceGrid.Registry.ReplicaName=Master
-
-# 4. Configuración del Nodo (que corre en el mismo proceso que el registry)
-IceGrid.Node.Name=Node1 # Nombre del nodo (debe coincidir con tu electionApp.xml)
-IceGrid.Node.Data=C:/icegrid_data/node1_collocated # Nueva ruta para los datos del nodo
-#    Endpoints donde el propio nodo escucha (para comunicación directa si es necesaria, o para los servidores que gestiona)
-IceGrid.Node.Endpoints=tcp -p 40600
-IceGrid.Node.CollocateRegistry=1
-
-# 5. Trazas (útiles para depuración)
-Ice.Trace.Network=1
-Ice.Trace.Locator=1
-Ice.Trace.Retry=1
+# --- Nombre del Nodo (Recomendado) ---
+IceGrid.Node.Name=Node1

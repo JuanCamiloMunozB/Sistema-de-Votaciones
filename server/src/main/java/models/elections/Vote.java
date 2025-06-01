@@ -27,6 +27,4 @@ public class Vote {
     @Column(name = "table_id")
     private Integer tableId;
 
-    @Column(name = "citizen_id")
-    private Integer citizenId;
 }

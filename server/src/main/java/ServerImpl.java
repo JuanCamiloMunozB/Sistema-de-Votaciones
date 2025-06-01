@@ -4,6 +4,7 @@ import models.votaciones.Citizen;
 import models.votaciones.VotingTable;
 import repositories.elections.*;
 import repositories.votaciones.*;
+import repositories.elections.VotedCitizenRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -22,11 +23,12 @@ public class ServerImpl implements ServerService {
     private final VoteRepository voteRepository;
     private final CitizenRepository citizenRepository;
     private final VotingTableRepository votingTableRepository;
+    private final VotedCitizenRepository votedCitizenRepository;
 
     private Election currentElection;
     List<Candidate> candidates;
     private Map<Integer, List<VotingTable>> votingTablesByStation;
-    private Map<Integer, List<Citizen>> citizensByTable;
+    private final Map<VotingTable, List<Citizen>> citizensByTableCache;
     
     private final Map<String, EventObserverPrx> subscribers = new ConcurrentHashMap<>();
     
@@ -34,90 +36,137 @@ public class ServerImpl implements ServerService {
                       CandidateRepository candidateRepository, 
                       VoteRepository voteRepository, 
                       CitizenRepository citizenRepository, 
-                      VotingTableRepository votingTableRepository) {
+                      VotingTableRepository votingTableRepository,
+                      VotedCitizenRepository votedCitizenRepository) {
+        System.out.println("ServerImpl: Constructor - START");
         this.electionRepository = electionRepository;
         this.candidateRepository = candidateRepository;
         this.voteRepository = voteRepository;
         this.citizenRepository = citizenRepository;
         this.votingTableRepository = votingTableRepository;
-        initElection();
+        this.votedCitizenRepository = votedCitizenRepository;
+        this.citizensByTableCache = new ConcurrentHashMap<>();
+        System.out.println("ServerImpl: Constructor - Repositories assigned.");
+        try {
+            initElectionBasicData();
+        } catch (Throwable t) {
+            System.err.println("ServerImpl: CRITICAL ERROR during initElectionBasicData: " + t.getMessage());
+            t.printStackTrace(System.err);
+            throw t;
+        }
+        System.out.println("ServerImpl: Constructor - END");
     }
 
-    private void initElection() {
+    private void initElectionBasicData() {
+        System.out.println("ServerImpl.initElectionBasicData: START");
         if (this.currentElection != null) {
-            return; // Already initialized
+            System.out.println("ServerImpl.initElectionBasicData: Already initialized, returning.");
+            return;
         }
+        System.out.println("ServerImpl.initElectionBasicData: Finding current election...");
         this.currentElection = electionRepository.findCurrentElection()
-            .orElseThrow(() -> new RuntimeException("No current election found"));
+            .orElseThrow(() -> {
+                System.err.println("ServerImpl.initElectionBasicData: No current election found - RuntimeException.");
+                return new RuntimeException("No current election found");
+            });
+        System.out.println("ServerImpl.initElectionBasicData: Current election found: " + this.currentElection.getName());
+        
+        System.out.println("ServerImpl.initElectionBasicData: Finding candidates...");
         this.candidates = candidateRepository.findCandidatesByElectionId(this.currentElection.getId());
+        System.out.println("ServerImpl.initElectionBasicData: Candidates found: " + (this.candidates != null ? this.candidates.size() : "null"));
+
+        System.out.println("ServerImpl.initElectionBasicData: Grouping voting tables by station...");
         this.votingTablesByStation = votingTableRepository.groupVotingTablesByStation();
-        this.citizensByTable = citizenRepository.groupCitizensByVotingTable();
+        System.out.println("ServerImpl.initElectionBasicData: Voting tables grouped: " + (this.votingTablesByStation != null ? this.votingTablesByStation.size() : "null"));
+
+        System.out.println("ServerImpl.initElectionBasicData: END - Basic data loaded. Citizens will be loaded on demand.");
     }
 
     @Override
     public ElectionData getElectionData(int controlCenterId, Current current) {
         if (currentElection == null) {
-            initElection();
+            initElectionBasicData();
         }
         return convertElectionToElectionData(currentElection);
+    }
+
+    private List<Citizen> getOrLoadCitizensForTable(VotingTable votingTable) {
+        List<Citizen> citizens = citizensByTableCache.get(votingTable);
+        if (citizens == null) {
+            System.out.println("[ServerImpl] Cache miss for citizens of table ID: " + votingTable.getId() + ". Loading from repository...");
+            citizens = citizenRepository.findByVotingTableId(votingTable.getId());
+            if (citizens != null) {
+                System.out.println("[ServerImpl] Loaded " + citizens.size() + " citizens for table ID: " + votingTable.getId());
+                citizensByTableCache.put(votingTable, citizens);
+            } else {
+                System.out.println("[ServerImpl] No citizens found in repository for table ID: " + votingTable.getId());
+                citizens = new ArrayList<>();
+                citizensByTableCache.put(votingTable, citizens);
+            }
+        } else {
+            System.out.println("[ServerImpl] Cache hit for citizens of table ID: " + votingTable.getId() + ". Found " + citizens.size() + " citizens.");
+        }
+        return citizens;
     }
 
     @Override
     public VotingTableData[] getVotingTablesFromStation(int controlCenterId, Current current) {
         if (currentElection == null) {
-            initElection();
+            initElectionBasicData();
         }
         
-        List<VotingTable> votingTables = votingTablesByStation.get(controlCenterId);
-        if (votingTables == null) {
+        List<VotingTable> votingTablesForStation = votingTablesByStation.get(controlCenterId);
+        if (votingTablesForStation == null || votingTablesForStation.isEmpty()) {
+            System.out.println("[ServerImpl] No voting tables found for station/controlCenterId: " + controlCenterId);
             return new VotingTableData[0];
         }
-        return votingTables.stream()
+
+        System.out.println("[ServerImpl] Preparing VotingTableData for " + votingTablesForStation.size() + " tables in station: " + controlCenterId);
+        
+        return votingTablesForStation.stream()
             .map(this::convertVotingTableToVotingTableData)
             .toArray(VotingTableData[]::new);
     }
 
     @Override
-    public void registerVote(VoteData vote, Current current) {
-        if (this.candidates == null || this.votingTablesByStation == null || this.citizensByTable == null ) {
-            initElection();
+    public void registerVote(VoteData vote, Current current)
+        throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable {
+        if (this.candidates == null || this.votingTablesByStation == null) {
+            initElectionBasicData();
         }
 
-        if (voteRepository.hasVoted(vote.citizenId)) {
-            throw new RuntimeException("Citizen has already voted");
+        Citizen citizen = citizenRepository.findByDocument(vote.citizenDocument)
+            .orElseThrow(() -> new CitizenNotFound("Citizen with document " + vote.citizenDocument + " not found"));
+        if (votedCitizenRepository.existsById(citizen.getId())) {
+            throw new CitizenAlreadyVoted("Citizen with document " + vote.citizenDocument + " (ID: " + citizen.getId() + ") has already voted");
         }
 
-        Citizen citizen = citizenRepository.findById(vote.citizenId)
-            .orElseThrow(() -> new RuntimeException("Citizen not found"));
         if (citizen.getVotingTable().getId() != vote.tableId) {
-            throw new RuntimeException("Citizen does not belong to this voting table");
+            throw new CitizenNotBelongToTable("Citizen with document " + vote.citizenDocument + " (ID: " + citizen.getId() + ") does not belong to voting table " + vote.tableId);
         }
         
-        Candidate candidate = this.candidates.stream()
+        Candidate candidateEntity = this.candidates.stream()
             .filter(c -> c.getId() == vote.candidateId)
             .findFirst()
-            .orElseThrow(() -> new RuntimeException("Candidate not found"));
+            .orElseThrow(() -> new CandidateNotFound("Candidate with ID " + vote.candidateId + " not found"));
 
-        VotingTable votingTable = votingTablesByStation.values().stream()
-            .flatMap(List::stream)
-            .filter(table -> table.getId() == vote.tableId)
-            .findFirst()
-            .orElseThrow(() -> new RuntimeException("Voting table not found in server context"));
+
+        votedCitizenRepository.save(new VotedCitizen(citizen.getId()));
 
         Vote newVoteToSave = new Vote();
-        newVoteToSave.setCitizenId(vote.citizenId);
-        newVoteToSave.setCandidate(candidate);
-        newVoteToSave.setTableId(votingTable.getId());
+        newVoteToSave.setCandidate(candidateEntity);
+        newVoteToSave.setTableId(vote.tableId)
         newVoteToSave.setTimestamp(java.time.LocalDateTime.now());
         if (this.currentElection != null) {
             newVoteToSave.setElection(this.currentElection);
         }
 
         voteRepository.save(newVoteToSave);
-        System.out.println("Vote registered for citizen: " + vote.citizenId);
+        System.out.println("Anonymous vote registered. Citizen with document: " + vote.citizenDocument + " (ID: " + citizen.getId() + ") marked as voted.");
 
         Map<String, String> details = new HashMap<>();
-        details.put("citizenId", String.valueOf(vote.citizenId));
+        details.put("citizenDocument", vote.citizenDocument);
+        details.put("citizenId", String.valueOf(citizen.getId()));
         details.put("candidateId", String.valueOf(vote.candidateId));
         details.put("tableId", String.valueOf(vote.tableId));
         if (this.currentElection != null) {
@@ -131,6 +180,7 @@ public class ServerImpl implements ServerService {
             details
         );
         notifySubscribers(event);
+        System.out.println("ServerImpl.registerVote: Exiting successfully for document " + vote.citizenDocument);
     }
 
     @Override
@@ -189,10 +239,8 @@ public class ServerImpl implements ServerService {
     }
 
     private VotingTableData convertVotingTableToVotingTableData(VotingTable votingTable) {
-        List<Citizen> citizensInTable = citizensByTable.get(votingTable.getId());
-        if (citizensInTable == null) {
-            citizensInTable = new java.util.ArrayList<>();
-        }
+        List<Citizen> citizensInTable = getOrLoadCitizensForTable(votingTable);
+        
         return new VotingTableData(
             votingTable.getId(),
             citizensInTable.stream()

@@ -1,5 +1,7 @@
 import ElectionSystem.ServerServicePrx;
 import ElectionSystem.VoteData;
+import ElectionSystem.CitizenAlreadyVoted;
+import ElectionSystem.CitizenNotFound;
 import com.zeroc.Ice.ConnectTimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,12 +32,12 @@ class ControlCenterImplTest {
 
     @BeforeEach
     void setUp() {
-        sampleVoteData = new VoteData(1, 101, 201, "test-ts");
+        sampleVoteData = new VoteData("DOC001", 101, 201, "test-ts");
         controlCenterImpl.pendingVotes.clear();
     }
 
     @Test
-    void submitVote_serverAvailable_sendsVoteDirectly() {
+    void submitVote_serverAvailable_sendsVoteDirectly() throws Exception {
         assertDoesNotThrow(() -> controlCenterImpl.submitVote(sampleVoteData, current));
 
         verify(serverServicePrx, times(1)).registerVote(sampleVoteData);
@@ -43,11 +45,10 @@ class ControlCenterImplTest {
     }
 
     @Test
-    void submitVote_serverUnavailable_addsToPendingQueue() {
-        // Simular que el servidor no está disponible
+    void submitVote_serverUnavailable_addsToPendingQueue() throws Exception {
         doThrow(new ConnectTimeoutException()).when(serverServicePrx).registerVote(sampleVoteData);
 
-        controlCenterImpl.submitVote(sampleVoteData, current); // No debería lanzar excepción aquí
+        controlCenterImpl.submitVote(sampleVoteData, current);
 
         verify(serverServicePrx, times(1)).registerVote(sampleVoteData);
         assertEquals(1, controlCenterImpl.pendingVotes.size(), "Vote should be added to pending queue");
@@ -55,45 +56,40 @@ class ControlCenterImplTest {
     }
 
     @Test
-    void submitVote_serverError_throwsExceptionAndNotQueued() {
-        // Simular un error del servidor que no sea de conexión (ej. voto inválido)
-        RuntimeException serverSideError = new RuntimeException("Citizen already voted");
+    void submitVote_serverError_throwsExceptionAndNotQueued() throws Exception {
+        CitizenAlreadyVoted serverSideError = new CitizenAlreadyVoted("Citizen DOC001 has already voted");
         doThrow(serverSideError).when(serverServicePrx).registerVote(sampleVoteData);
 
-        RuntimeException thrown = assertThrows(RuntimeException.class, () -> {
+        CitizenAlreadyVoted thrown = assertThrows(CitizenAlreadyVoted.class, () -> {
             controlCenterImpl.submitVote(sampleVoteData, current);
         });
 
-        assertSame(serverSideError, thrown, "Should rethrow the server side exception");
+        assertSame(serverSideError, thrown, "Should rethrow the specific server side exception");
         verify(serverServicePrx, times(1)).registerVote(sampleVoteData);
         assertTrue(controlCenterImpl.pendingVotes.isEmpty(), "Vote should not be added to queue on server error");
     }
 
     @Test
-    void processPendingVotes_sendsQueuedVote_whenServerBecomesAvailable() {
-        // 1. Poner un voto en la cola (simulando que el servidor no estaba disponible antes)
+    void processPendingVotes_sendsQueuedVote_whenServerBecomesAvailable() throws Exception {
         controlCenterImpl.pendingVotes.add(sampleVoteData);
-        VoteData anotherVote = new VoteData(2, 102, 202, "ts2");
+        VoteData anotherVote = new VoteData("DOC002", 102, 202, "ts2");
         controlCenterImpl.pendingVotes.add(anotherVote);
 
-        // 2. Simular que el servidor está ahora disponible para el primer voto, pero no para el segundo
         doNothing().when(serverServicePrx).registerVote(sampleVoteData);
         doThrow(new ConnectTimeoutException()).when(serverServicePrx).registerVote(anotherVote);
 
-        // 3. Llamar a processPendingVotes manualmente
         controlCenterImpl.processPendingVotes();
 
-        // 4. Verificar
         verify(serverServicePrx, times(1)).registerVote(sampleVoteData);
-        verify(serverServicePrx, times(1)).registerVote(anotherVote); // Se intentó enviar el segundo también
+        verify(serverServicePrx, times(1)).registerVote(anotherVote);
         assertEquals(1, controlCenterImpl.pendingVotes.size(), "One vote should remain in queue");
         assertSame(anotherVote, controlCenterImpl.pendingVotes.peek(), "The second vote should be the one remaining");
     }
 
     @Test
-    void processPendingVotes_removesVote_onNonRecoverableError() {
+    void processPendingVotes_removesVote_onNonRecoverableError() throws Exception {
         controlCenterImpl.pendingVotes.add(sampleVoteData);
-        RuntimeException nonRecoverableError = new RuntimeException("Invalid vote data");
+        CitizenNotFound nonRecoverableError = new CitizenNotFound("Citizen for vote data not found during processing");
         doThrow(nonRecoverableError).when(serverServicePrx).registerVote(sampleVoteData);
 
         controlCenterImpl.processPendingVotes();
@@ -103,10 +99,10 @@ class ControlCenterImplTest {
     }
 
      @Test
-    void processPendingVotes_emptyQueue_doesNothing() {
+    void processPendingVotes_emptyQueue_doesNothing() throws Exception {
         assertTrue(controlCenterImpl.pendingVotes.isEmpty());
         
-        controlCenterImpl.processPendingVotes(); // Llamar con cola vacía
+        controlCenterImpl.processPendingVotes();
         
         verify(serverServicePrx, never()).registerVote(any(VoteData.class));
         assertTrue(controlCenterImpl.pendingVotes.isEmpty());
