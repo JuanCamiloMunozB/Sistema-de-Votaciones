@@ -4,7 +4,6 @@ import models.votaciones.Citizen;
 import models.votaciones.VotingTable;
 import repositories.elections.*;
 import repositories.votaciones.*;
-import repositories.elections.VotedCitizenRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;

@@ -22,9 +22,9 @@ CREATE TABLE candidate (
     CONSTRAINT fk_candidate_election FOREIGN KEY (election_id) REFERENCES election(id)
 );
 
+
 CREATE TABLE votes (
     id SERIAL PRIMARY KEY, 
-    citizen_id INT NOT NULL,
     candidate_id INT NOT NULL,
     election_id INT NOT NULL,
     table_id INT NOT NULL,      
