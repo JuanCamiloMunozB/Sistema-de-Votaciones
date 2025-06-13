@@ -68,5 +68,5 @@ java -jar proxy_cache_server/build/libs/proxy_cache_server.jar
 **Paso 7: Ejecutar el QueryStation (en otra terminal, tendrás cuatro terminales abiertas)**
 
 ```bash
-java -jar proxy_cache_server/build/libs/proxy_cache_server.jar
+java -jar query_station/build/libs/query_station.jar
 ```

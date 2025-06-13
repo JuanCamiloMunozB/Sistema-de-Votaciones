@@ -278,8 +278,6 @@ public class ServerImpl implements ServerService {
 
      @Override
     public String findVotingStationByDocument(String document, Current current) {
-        System.out.println("ServerServiceImpl.findVotingStationByDocument: Processing document: " + document);
-        
         try {
             Optional<Citizen> citizenOpt = citizenRepository.findByDocument(document);
             
@@ -296,10 +294,8 @@ public class ServerImpl implements ServerService {
                     station.getConsecutive()
                 );
                 
-                System.out.println("ServerServiceImpl.findVotingStationByDocument: Found voting station for document: " + document);
                 return locationInfo;
             } else {
-                System.out.println("ServerServiceImpl.findVotingStationByDocument: Citizen not found for document: " + document);
                 return null;
             }
             

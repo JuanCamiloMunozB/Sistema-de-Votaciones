@@ -12,56 +12,21 @@ public class QueryStationMain {
         
         try (Communicator communicator = Util.initialize(args, "config.query.cfg");
              Scanner scanner = new Scanner(System.in)) {
-            
-            System.out.println("=== Query Station Client (Independiente) ===");
-            System.out.println("Target: 2,666+ consultas por segundo");
-            System.out.println("Conectando al Proxy Cache...");
-            
-            // Leer configuración del Proxy Cache desde archivo
+
             Properties props = communicator.getProperties();
             String proxyCacheProxy = props.getProperty("ProxyCache.Proxy");
-            
-            if (proxyCacheProxy == null || proxyCacheProxy.trim().isEmpty()) {
-                System.err.println("❌ Error: ProxyCache.Proxy no está configurado en config.query.cfg");
-                return;
-            }
-            
-            System.out.println("Usando configuración: " + proxyCacheProxy);
-            
-            // Conectar usando configuración
             ObjectPrx proxyCacheBase = communicator.stringToProxy(proxyCacheProxy);
             ServerQueryServicePrx proxyCacheService = ServerQueryServicePrx.checkedCast(proxyCacheBase);
-            
-            if (proxyCacheService == null) {
-                System.err.println("Error: No se pudo conectar al Proxy Cache");
-                System.err.println("Configuración: " + proxyCacheProxy);
-                System.err.println("Asegúrate de que Proxy Cache esté ejecutándose");
-                return;
-            }
-            
-            System.out.println("Conectado al Proxy Cache usando configuración");
-            
-            // Crear adapter local
             ObjectAdapter adapter = communicator.createObjectAdapter("QueryStationAdapter");
             
-            // Instanciar servicio
             queryStationImpl = new QueryStationImpl(proxyCacheService);
-            
-            // Registrar servicio LOCALMENTE
             adapter.add(queryStationImpl, Util.stringToIdentity("QueryStation"));
             adapter.activate();
             
-            // Crear proxy para CLI
             queryStationProxy = queryStationPrx.uncheckedCast(
                 adapter.createProxy(Util.stringToIdentity("QueryStation"))
             );
             
-            System.out.println("QueryStation activo como cliente independiente");
-            System.out.println("Puerto local: 9092");
-            System.out.println("Configuración leída de: config.query.cfg");
-            System.out.println("QueryStation listo para consultas...");
-            
-            // Iniciar CLI integrada
             startCLI(scanner);
             
         } catch (Exception e) {
@@ -117,9 +82,8 @@ public class QueryStationMain {
     
     private static void handleSingleQuery(String document) {
         try {
-            System.out.println("Querying document: " + document);
             long startTime = System.currentTimeMillis();
-            
+
             String result = queryStationProxy.query(document);
             
             long endTime = System.currentTimeMillis();
