@@ -5,7 +5,7 @@ Ice.Default.Locator=IceGrid/Locator:tcp -h localhost -p 40620
 IceGrid.Node.Endpoints=tcp -h localhost -p 40600
 
 # --- Datos del Nodo ---
-IceGrid.Node.Data=db/node1
+IceGrid.Node.Data=ice-grid/db/node1
 
 # --- Nombre del Nodo (Recomendado) ---
 IceGrid.Node.Name=Node1

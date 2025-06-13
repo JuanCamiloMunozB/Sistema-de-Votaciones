@@ -19,21 +19,33 @@ subprojects {
     }
 
     dependencies {
+        // Dependencias base para todos los proyectos
         implementation 'com.zeroc:ice:3.7.9'
         implementation 'com.zeroc:icegrid:3.7.9'
-        // https://mvnrepository.com/artifact/com.google.code.gson/gson
-        // implementation 'com.google.code.gson:gson:2.10.1'
-        implementation 'org.apache.poi:poi:5.0.0'
-        implementation 'org.apache.poi:poi-ooxml:5.0.0'
-        implementation 'org.hibernate.orm:hibernate-core:6.4.4.Final'
-        implementation 'jakarta.persistence:jakarta.persistence-api:3.1.0'
-        implementation 'org.postgresql:postgresql:42.7.2'
-        implementation 'com.zaxxer:HikariCP:5.0.1'
-        implementation 'org.springframework.boot:spring-boot-starter-data-jpa:3.1.5'
-        implementation 'jakarta.persistence:jakarta.persistence-api:3.1.0'
-        implementation 'org.hibernate.orm:hibernate-core:6.4.4.Final'
-        compileOnly 'org.projectlombok:lombok:1.18.30'
-        annotationProcessor 'org.projectlombok:lombok:1.18.30'
+        
+        // Dependencias específicas solo para server
+        if (project.name == 'server') {
+            implementation 'org.apache.poi:poi:5.0.0'
+            implementation 'org.apache.poi:poi-ooxml:5.0.0'
+            implementation 'org.hibernate.orm:hibernate-core:6.4.4.Final'
+            implementation 'jakarta.persistence:jakarta.persistence-api:3.1.0'
+            implementation 'org.postgresql:postgresql:42.7.2'
+            implementation 'com.zaxxer:HikariCP:5.0.1'
+            implementation 'org.springframework.boot:spring-boot-starter-data-jpa:3.1.5'
+            compileOnly 'org.projectlombok:lombok:1.18.30'
+            annotationProcessor 'org.projectlombok:lombok:1.18.30'
+        }
+        
+        // Dependencias específicas solo para control_center
+        if (project.name == 'control_center') {
+            implementation 'org.hibernate.orm:hibernate-core:6.4.4.Final'
+            implementation 'jakarta.persistence:jakarta.persistence-api:3.1.0'
+            implementation 'org.postgresql:postgresql:42.7.2'
+            compileOnly 'org.projectlombok:lombok:1.18.30'
+            annotationProcessor 'org.projectlombok:lombok:1.18.30'
+        }
+        
+        // Test dependencies
         testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
         testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
         testImplementation 'org.mockito:mockito-core:5.5.0'
@@ -44,32 +56,80 @@ subprojects {
         useJUnitPlatform()
     }
 
+    // Fat JAR con todas las dependencias
     shadowJar {
         archiveBaseName.set(project.name)
         archiveClassifier.set('')
         archiveVersion.set('')
-    }
-
-    // Tarea para agregar las dependencias al lib donde esta el ejecutable de cada proyecto
-    task copyIceJar(type: Copy) {
-        configurations.runtimeClasspath
-        'ice-3.7.10.jar'
-        //'gson-2.10.1.jar'
-        "$buildDir/libs"
-    }
-
-    jar.dependsOn copyIceJar
-    
-
-    // Definir en el class-path que cada librería está en el libs 
-    jar {
+        
         manifest {
             attributes(
-                "Main-Class": project.name.split('_').collect { it.capitalize() }.join('') + "Main",
-                "Class-Path": configurations.runtimeClasspath.resolve().collect { it.toURI() }.join(' ')
-                // "Class-Path": '/opt/Ice-3.7.6/lib/ice-3.7.6.jar'
-        )
+                "Main-Class": getMainClassForProject(project.name)
+            )
         }
     }
     
+    // Asegurar que shadowJar se ejecute en build
+    build.dependsOn shadowJar
+}
+
+// Función para determinar la clase Main
+def getMainClassForProject(String projectName) {
+        switch(projectName) {
+            case 'server':
+                return 'ServerMain'
+            case 'control_center':
+                return 'ControlCenterMain'
+            case 'voting_table':
+                return 'VotingTableMain'
+            case 'query_station':
+                return 'QueryStationMain'
+            case 'proxy_cache_server':
+                return 'ProxyCacheServerMain'
+            default:
+                return project.name.split('_').collect { it.capitalize() }.join('') + "Main"
+        }
+    }
+
+// Tareas para ejecutar JAR individuales
+task runServerJar(type: Exec) {
+    workingDir file('.')
+    commandLine 'java', '-jar', 'server/build/libs/server.jar'
+}
+
+task runProxyCacheJar(type: Exec) {
+    workingDir file('.')
+    commandLine 'java', '-jar', 'proxy_cache_server/build/libs/proxy_cache_server.jar'
+    dependsOn ':proxy_cache_server:shadowJar'
+}
+
+task runQueryStationJar(type: Exec) {
+    workingDir file('.')
+    commandLine 'java', '-jar', 'query_station/build/libs/query_station.jar'
+    dependsOn ':query_station:shadowJar'
+}
+
+task runControlCenterJar(type: Exec) {
+    workingDir file('.')
+    commandLine 'java', '-jar', 'control_center/build/libs/control_center.jar'
+    dependsOn ':control_center:shadowJar'
+}
+
+// Tarea para construir todos los JARs
+task buildAllJars {
+    dependsOn ':server:shadowJar'
+    dependsOn ':control_center:shadowJar'
+    dependsOn ':voting_table:shadowJar'
+    dependsOn ':proxy_cache_server:shadowJar'
+    dependsOn ':query_station:shadowJar'
+    
+    doLast {
+        println "Todos los JARs construidos exitosamente"
+        println "Ubicaciones:"
+        println "- server/build/libs/server.jar"
+        println "- control_center/build/libs/control_center.jar"
+        println "- voting_table/build/libs/voting_table.jar"
+        println "- proxy_cache_server/build/libs/proxy_cache_server.jar"
+        println "- query_station/build/libs/query_station.jar"
+    }
 }

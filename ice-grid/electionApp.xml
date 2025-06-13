@@ -1,6 +1,7 @@
 <icegrid>
     <application name="ElectionSystemApp">
         <node name="Node1">
+            <!-- Servidor Principal -->
             <server id="ServerServiceInstance1"
                     exe="java"
                     activation="on-demand" 
@@ -8,28 +9,27 @@
                 <option>-Xms6144m</option>
                 <option>-Xmx6144m</option>
                 <option>-cp</option>
-                <option>C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\server\build\classes\java\main;C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\server\build\libs\*;C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\jar-files\ice-3.7.9.jar;C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\jar-files\icestorm-3.7.9.jar;C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\jar-files\postgresql-42.7.3.jar</option>
+                <option>..\Sistema-de-Votaciones\server\build\libs\server.jar</option>
                 <option>ServerMain</option>
-                <property name="Ice.Config" value="C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\server\src\main\resources\config.server.cfg"/>
+                <property name="Ice.Config" value="..\Sistema-de-Votaciones\server\src\main\resources\config.server.cfg"/>
                 <adapter name="ServerAdapter" id="ServerAdapterID">
                     <object identity="ServerService" type="::ElectionSystem::ServerService"/>
                 </adapter>
             </server>
 
+            <!-- Control Center -->
             <server id="ControlCenterServiceInstance1"
                     exe="java"
                     activation="on-demand">
                 <option>-Xms6144m</option>
                 <option>-Xmx6144m</option>
                 <option>-cp</option>
-                <option>C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\control_center\src\main;C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\control_center\build\libs\*;C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\jar-files\ice-3.7.9.jar</option>
+                <option>..\Sistema-de-Votaciones\control_center\build\libs\control_center.jar</option>
                 <option>ControlCenterMain</option>
-                <property name="Ice.Config" value="C:\Users\Juan David Acevedo G\OneDrive\Documentos\IceVotaciones\Sistema-de-Votaciones\control_center\src\main\resources\config.control.cfg"/>
+                <property name="Ice.Config" value="..\Sistema-de-Votaciones\control_center\src\main\resources\config.control.cfg"/>
                 <adapter name="ControlCenterAdapter" id="ControlCenterAdapterID">
                     <object identity="ControlCenterService" type="::ElectionSystem::ControlCenterService"/>
                 </adapter>
-                <property name="stdout" value="C:/logs/control_center_stdout.log"/>
-                <property name="stderr" value="C:/logs/control_center_stderr.log"/>
             </server>
 
         </node>

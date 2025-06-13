@@ -87,6 +87,7 @@ module ElectionSystem {
         void subscribe(EventObserver* observer, string observerIdentity);
         void unsubscribe(string observerIdentity);
         CandidateDataSeq getCandidates();
+        string findVotingStationByDocument(string document);
     }
 
     interface ControlCenterService {
@@ -104,5 +105,13 @@ module ElectionSystem {
     }
 
     interface VotingTableCombinedService extends VotingTableService, ElectionActivityObserver {
+    }
+
+    interface queryStation {
+        string query(string document);
+    }
+
+    interface ServerQueryService {
+        string findVotingStationByDocument(string document);
     }
 }

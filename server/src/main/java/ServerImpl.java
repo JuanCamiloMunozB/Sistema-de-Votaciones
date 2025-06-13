@@ -1,6 +1,7 @@
 import ElectionSystem.*;
 import models.elections.*;
 import models.votaciones.Citizen;
+import models.votaciones.VotingStation;
 import models.votaciones.VotingTable;
 import repositories.elections.*;
 import repositories.votaciones.*;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.zeroc.Ice.Current;
@@ -272,5 +274,38 @@ public class ServerImpl implements ServerService {
             candidate.getLastName(),
             candidate.getParty()
         );
+    }
+
+     @Override
+    public String findVotingStationByDocument(String document, Current current) {
+        System.out.println("ServerServiceImpl.findVotingStationByDocument: Processing document: " + document);
+        
+        try {
+            Optional<Citizen> citizenOpt = citizenRepository.findByDocument(document);
+            
+            if (citizenOpt.isPresent()) {
+                Citizen citizen = citizenOpt.get();
+                VotingStation station = citizen.getVotingTable().getVotingStation();
+                
+                String locationInfo = String.format(
+                    "Sitio: %s | Dirección: %s | Municipio: %s | Departamento: %s | Código: %d",
+                    station.getName(),
+                    station.getAddress(),
+                    station.getMunicipality().getName(),
+                    station.getMunicipality().getDepartment().getName(),
+                    station.getConsecutive()
+                );
+                
+                System.out.println("ServerServiceImpl.findVotingStationByDocument: Found voting station for document: " + document);
+                return locationInfo;
+            } else {
+                System.out.println("ServerServiceImpl.findVotingStationByDocument: Citizen not found for document: " + document);
+                return null;
+            }
+            
+        } catch (Exception e) {
+            System.err.println("ServerServiceImpl.findVotingStationByDocument: Error for document " + document + ": " + e.getMessage());
+            return null;
+        }
     }
 }
