@@ -100,11 +100,15 @@ module ElectionSystem {
         void unsubscribeElectionActivity(string votingTableIdentity);
     }
 
+    interface VoteStation{
+        int vote(string document, int candidateId);
+    }
+
     interface VotingTableService {
         void emitVote(VoteData vote) throws ElectionInactive, CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable;
     }
 
-    interface VotingTableCombinedService extends VotingTableService, ElectionActivityObserver {
+    interface VotingTableCombinedService extends VotingTableService, ElectionActivityObserver, VoteStation {
     }
 
     interface queryStation {
