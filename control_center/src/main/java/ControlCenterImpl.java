@@ -24,12 +24,6 @@ import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;import java.util.concurrent.ConcurrentHashMap;
-import ElectionSystem.ElectionActivityObserverPrx;
-import ElectionSystem.CitizenAlreadyVoted;
-import ElectionSystem.CitizenNotFound;
-import ElectionSystem.CandidateNotFound;
-import ElectionSystem.CitizenNotBelongToTable;
-import ElectionSystem.ElectionInactive;
 
 
 public class ControlCenterImpl implements ControlCenterService {
@@ -263,6 +257,7 @@ public class ControlCenterImpl implements ControlCenterService {
     public void endElection(Current current) {
         System.out.println("ControlCenter [" + controlCenterId + "]: Finalizando elección.");
         notifyElectionEnded();
+        exportResultsToCSV();
     }
     @Override
     public void submitVote(VoteData vote, Current current) throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable, ElectionInactive {
@@ -344,4 +339,39 @@ public class ControlCenterImpl implements ControlCenterService {
             System.out.println("ControlCenter [" + controlCenterId + "]: Mesa de votación '" + votingTableIdentity + "' no encontrada para desuscripción.");
         }
     }
+
+    private void exportResultsToCSV() {
+    try {
+        System.out.println("Exportando resultados...");
+
+        // Archivo global
+        CandidateResult[] globalResults = serverService.getGlobalResults();
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("resume.csv"))) {
+            writer.write("candidateId,candidateName,totalVotes\n");
+            for (CandidateResult r : globalResults) {
+                writer.write(String.format("%d,%s,%d\n", r.candidateId, r.candidateName, r.totalVotes));
+            }
+        }
+
+        // Archivos por mesa
+        Map<Integer, CandidateResult[]> perTableResults = serverService.getResultsByVotingTable();
+        for (Map.Entry<Integer, CandidateResult[]> entry : perTableResults.entrySet()) {
+            int tableId = entry.getKey();
+            CandidateResult[] tableResults = entry.getValue();
+            String fileName = "partial-" + tableId + ".csv";
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
+                writer.write("candidateId,candidateName,totalVotes\n");
+                for (CandidateResult r : tableResults) {
+                    writer.write(String.format("%d,%s,%d\n", r.candidateId, r.candidateName, r.totalVotes));
+                }
+            }
+        }
+
+        System.out.println(" Exportación de resultados completada.");
+    } catch (Exception e) {
+        System.err.println(" Error al exportar resultados: " + e.getMessage());
+        e.printStackTrace();
+    }
+    }
+
 }

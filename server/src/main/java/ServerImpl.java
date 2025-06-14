@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import com.zeroc.Ice.Current;
 
@@ -301,5 +302,40 @@ public class ServerImpl implements ServerService {
             System.err.println("ServerServiceImpl.findVotingStationByDocument: Error for document " + document + ": " + e.getMessage());
             return null;
         }
+    }
+
+    @Override
+    public CandidateResult[] getGlobalResults(Current current) {
+    Map<Integer, Long> votesByCandidate = candidates.stream().collect(Collectors.toMap(
+        Candidate::getId,
+        c -> voteRepository.countByCandidateId(c.getId())
+    ));
+
+    return candidates.stream()
+        .map(c -> new CandidateResult(
+            c.getId(),
+            c.getFirstName() + " " + c.getLastName(),
+            votesByCandidate.getOrDefault(c.getId(), 0L).intValue()
+        )).toArray(CandidateResult[]::new);
+    }
+
+    @Override
+    public Map<Integer, CandidateResult[]> getResultsByVotingTable(Current current) {
+    Map<Integer, Map<Integer, Integer>> rawVotes = voteRepository.countVotesGroupedByTableAndCandidate();
+
+    Map<Integer, CandidateResult[]> tableResults = new HashMap<>();
+    for (Map.Entry<Integer, Map<Integer, Integer>> entry : rawVotes.entrySet()) {
+        int tableId = entry.getKey();
+        Map<Integer, Integer> candidateVotes = entry.getValue();
+
+        List<CandidateResult> results = new ArrayList<>();
+        for (Candidate c : candidates) {
+            int count = candidateVotes.getOrDefault(c.getId(), 0);
+            results.add(new CandidateResult(c.getId(), c.getFirstName() + " " + c.getLastName(), count));
+        }
+        tableResults.put(tableId, results.toArray(new CandidateResult[0]));
+    }
+
+    return tableResults;
     }
 }

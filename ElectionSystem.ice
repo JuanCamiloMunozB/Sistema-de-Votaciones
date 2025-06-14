@@ -22,8 +22,17 @@ module ElectionSystem {
         string timestamp;
     }
 
+    struct CandidateResult {
+    int candidateId;
+    string candidateName;
+    int totalVotes;
+    };
+
     sequence<CandidateData> CandidateDataSeq;
     sequence<CitizenData> CitizenDataSeq;
+    sequence<CandidateResult> CandidateResultSeq;
+
+    dictionary<int, CandidateResultSeq> TableResultsMap;
 
     struct VotingTableData {
         int id;
@@ -88,6 +97,8 @@ module ElectionSystem {
         void unsubscribe(string observerIdentity);
         CandidateDataSeq getCandidates();
         string findVotingStationByDocument(string document);
+        CandidateResultSeq getGlobalResults();
+        TableResultsMap getResultsByVotingTable();
     }
 
     interface ControlCenterService {
