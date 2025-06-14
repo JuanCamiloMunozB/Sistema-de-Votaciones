@@ -19,13 +19,29 @@ public class ServerMain {
             Properties props = communicator.getProperties();
             String instanceId = props.getProperty("Server.Instance.Id");
             
+            if (instanceId == null || instanceId.isEmpty()) {
+                throw new RuntimeException("Server.Instance.Id property not found in configuration");
+            }
+            
             System.out.println("ServerMain (" + instanceId + "): Initializing JPAUtil...");
             JPAUtil.initialize(communicator);
             System.out.println("ServerMain (" + instanceId + "): JPAUtil initialized.");
 
-            System.out.println("ServerMain (" + instanceId + "): Creating ObjectAdapter 'ServerAdapter'...");
-            ObjectAdapter adapter = communicator.createObjectAdapter("ServerAdapter");
+            // Determinar el nombre del adaptador basado en la instancia
+            String adapterName = "ServerAdapter1";
+            if ("ServerInstance2".equals(instanceId)) {
+                adapterName = "ServerAdapter2";
+            }
+            
+            System.out.println("ServerMain (" + instanceId + "): Creating ObjectAdapter '" + adapterName + "'...");
+            ObjectAdapter adapter = communicator.createObjectAdapter(adapterName);
             System.out.println("ServerMain (" + instanceId + "): ObjectAdapter created.");
+            
+            // Log adapter information
+            System.out.println("ServerMain (" + instanceId + "): Adapter endpoints: " + adapter.getEndpoints().length + " endpoints");
+            for (int i = 0; i < adapter.getEndpoints().length; i++) {
+                System.out.println("  Endpoint " + i + ": " + adapter.getEndpoints()[i].toString());
+            }
 
             // Crear repositorios
             ElectionRepository electionRepository = new ElectionRepository();
@@ -35,14 +51,9 @@ public class ServerMain {
             VotingTableRepository votingTableRepository = new VotingTableRepository();
             VotedCitizenRepository votedCitizenRepository = new VotedCitizenRepository();
 
-            // Determinar la identidad basada en la instancia
+            // Use the common identity for both servers
             String identity = "ServerService";
-            if ("ServerInstance1".equals(instanceId)) {
-                identity = "ServerService1";
-            } else if ("ServerInstance2".equals(instanceId)) {
-                identity = "ServerService2";
-            }
-
+            
             System.out.println("ServerMain (" + instanceId + "): Adding ServerImpl to adapter with identity '" + identity + "'...");
             adapter.add(new ServerImpl(electionRepository, candidateRepository, voteRepository, 
                        citizenRepository, votingTableRepository, votedCitizenRepository), 
@@ -52,15 +63,28 @@ public class ServerMain {
             System.out.println("ServerMain (" + instanceId + "): Activating adapter...");
             adapter.activate();
             System.out.println("ServerMain (" + instanceId + "): Adapter activated.");
+            
+            // Log final adapter state
+            System.out.println("ServerMain (" + instanceId + "): Final adapter endpoints: " + adapter.getEndpoints().length + " endpoints");
+            for (int i = 0; i < adapter.getEndpoints().length; i++) {
+                System.out.println("  Final Endpoint " + i + ": " + adapter.getEndpoints()[i].toString());
+            }
+            
+            System.out.println("ServerMain (" + instanceId + "): Server activation completed successfully.");
             System.out.println("ServerService (" + instanceId + ") ready and registered.");
+            
+            // Add a small delay to ensure everything is properly initialized
+            Thread.sleep(2000); // Increased delay
             
             communicator.waitForShutdown();
         } catch (Throwable t) {
             System.err.println("ServerMain: CRITICAL ERROR during startup or execution: " + t.getMessage());
             t.printStackTrace();
+            System.exit(1);
         } finally {
             if (communicator != null) {
-                JPAUtil.shutdown(); 
+                JPAUtil.shutdown();
+                communicator.destroy();
             }
         }
     }

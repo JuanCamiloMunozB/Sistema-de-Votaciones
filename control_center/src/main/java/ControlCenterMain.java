@@ -14,13 +14,13 @@ public class ControlCenterMain {
             Scanner scanner = new Scanner(System.in)) { 
             
             ServerServicePrx serverService = ServerServicePrx.checkedCast(
-                communicator.stringToProxy("ServerServiceLoadBalancer"));
+                communicator.stringToProxy("ServerService"));
 
             if (serverService == null) {
-                System.err.println("Error: Could not get a proxy for ServerService from IceGrid. Check locator configuration and if ServerService is running and registered.");
+                System.err.println("Error: Could not get a proxy for ServerService load balancer from IceGrid. Check locator configuration and if ServerService replicas are running and registered.");
                 return;
             }
-            System.out.println("Successfully obtained ServerServicePrx from IceGrid.");
+            System.out.println("Successfully obtained ServerServicePrx (load balanced) from IceGrid.");
 
             ObjectAdapter adapter = communicator.createObjectAdapter("ControlCenterAdapter");
             
@@ -32,7 +32,6 @@ public class ControlCenterMain {
             System.out.println("ControlCenterService ready and registered with adapter ControlCenterAdapter under identity 'ControlCenterService'.");
             
             controlCenterImpl.initializeSubscription();
-
 
             System.out.println("\nControl Center UI (" + controlCenterId + ")");
             System.out.println("Commands: start | end | exit");

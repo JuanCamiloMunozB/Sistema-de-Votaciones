@@ -174,4 +174,4 @@ class ServerImplTest {
         verify(voteRepository, never()).save(any());
         verify(votedCitizenRepository, never()).save(any(VotedCitizen.class));
     }
-} 
+}

@@ -39,7 +39,7 @@ public class VotingTableImpl implements VotingTableCombinedService {
             System.out.println("VotingTable [" + votingTableId + "]: Attempting to emit vote for citizen: " + vote.citizenDocument);
             controlCenterService.submitVote(vote);
             System.out.println("VotingTable [" + votingTableId + "]: Vote emitted successfully for citizen: " + vote.citizenDocument);
-        } catch (CitizenAlreadyVoted | CitizenNotFound | CandidateNotFound | CitizenNotBelongToTable e) {
+        } catch (CitizenAlreadyVoted | CitizenNotFound | CandidateNotFound | CitizenNotBelongToTable | ElectionInactive e) {
             System.err.println("VotingTable [" + votingTableId + "]: Error emitting vote: " + e.ice_name() + " - " + e.getMessage());
             throw e;
         } catch (com.zeroc.Ice.CommunicatorDestroyedException | com.zeroc.Ice.ObjectNotExistException e) {

@@ -217,7 +217,7 @@ public class ServerImpl implements ServerService {
             String identity = entry.getKey();
             EventObserverPrx observer = entry.getValue();
             try {
-                observer._notify(event);
+                observer.notifyEvent(event);
                 System.out.println("Successfully notified observer: " + identity);
             } catch (com.zeroc.Ice.ObjectNotExistException | com.zeroc.Ice.CommunicatorDestroyedException e) {
                 System.err.println("Observer '" + identity + "' seems to be down. Removing: " + e.getMessage());
@@ -262,9 +262,19 @@ public class ServerImpl implements ServerService {
 
     @Override
     public CandidateData[] getCandidates(Current current) {
-        return this.candidates.stream()
+        System.out.println("ServerImpl.getCandidates: Called from client. Current candidates: " + (this.candidates != null ? this.candidates.size() : "null"));
+        
+        if (this.candidates == null) {
+            System.out.println("ServerImpl.getCandidates: Candidates is null, initializing...");
+            initElectionBasicData();
+        }
+        
+        CandidateData[] result = this.candidates.stream()
             .map(this::convertCandidateToCandidateData)
             .toList().toArray(new CandidateData[0]);
+            
+        System.out.println("ServerImpl.getCandidates: Returning " + result.length + " candidates");
+        return result;
     }
 
     private CandidateData convertCandidateToCandidateData(Candidate candidate) {

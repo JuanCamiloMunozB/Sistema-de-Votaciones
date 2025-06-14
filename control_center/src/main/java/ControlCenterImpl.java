@@ -94,7 +94,7 @@ public class ControlCenterImpl implements ControlCenterService {
         }
 
         @Override
-        public void _notify(ElectionEvent event, Current current) {
+        public void notifyEvent(ElectionEvent event, Current current) {
             System.out.println("ControlCenter Observer ('" + this.ownerControlCenterId + "') recibió evento: " + event.type.name());
             System.out.println("  Timestamp: " + event.timestamp);
             if (event.details != null) {

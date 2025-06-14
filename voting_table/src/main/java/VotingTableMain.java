@@ -20,7 +20,7 @@ public class VotingTableMain {
         try {
             String numericPart = tableIdStr.replaceAll("[^0-9]", "");
             if (numericPart.isEmpty()) {
-                 System.err.println("Could not parse a numeric ID from tableId: " + tableIdStr + ". Defaulting to 0 or handle error.");
+                 System.err.println("Could not parse a numeric ID from tableId: " + tableIdStr + ". Defaulting to 0.");
                  numericTableId = 0; 
             } else {
                 numericTableId = Integer.parseInt(numericPart);
@@ -31,10 +31,10 @@ public class VotingTableMain {
             return;
         }
 
-
         try (Communicator communicator = Util.initialize(args, "config.voting.cfg");
              Scanner scanner = new Scanner(System.in)) { 
             
+            // Conectar al ControlCenter via IceGrid
             ControlCenterServicePrx controlCenterService = ControlCenterServicePrx.checkedCast(
                 communicator.stringToProxy("ControlCenterService"));
 
@@ -50,6 +50,7 @@ public class VotingTableMain {
             adapter.activate();
             System.out.println("VotingTableService ready (" + tableIdStr + ").");
             
+            // Suscribirse a eventos de actividad electoral
             try {
                 ElectionActivityObserverPrx observerPrx = 
                     ElectionActivityObserverPrx.uncheckedCast(
@@ -67,7 +68,7 @@ public class VotingTableMain {
 
             boolean running = true;
             System.out.println("\nVoting Table UI (" + tableIdStr + ")");
-            System.out.println("Commands: vote <citizenDocument> <candidateId> | candidates | status | exit");
+            System.out.println("Commands: vote <citizenDocument> <candidateId> | simplevote <citizenDocument> <candidateId> | candidates | status | exit");
 
             while(running) {
                 System.out.print("> ");
@@ -87,15 +88,44 @@ public class VotingTableMain {
                                     votingTableImpl.emitVote(vote, null); 
                                     System.out.println("Vote for citizen document " + citizenDocument + " to candidate " + candidateId + " submitted.");
                                 } catch (NumberFormatException e) {
-                                    System.err.println("Invalid candidate ID format. Must be an integer. Citizen document should be a string.");
+                                    System.err.println("Invalid candidate ID format. Must be an integer.");
                                 } catch (ElectionInactive e) {
                                     System.err.println("Vote submission failed: " + e.reason);
                                 } catch (Exception e) {
                                     System.err.println("Error submitting vote: " + e.getMessage());
-                                    e.printStackTrace();
                                 }
                             } else {
                                 System.err.println("Usage: vote <citizenDocument> <candidateId>");
+                            }
+                            break;
+                        case "simplevote":
+                            if (parts.length == 3) {
+                                try {
+                                    String citizenDocument = parts[1];
+                                    int candidateId = Integer.parseInt(parts[2]);
+                                    int result = votingTableImpl.vote(citizenDocument, candidateId, null);
+                                    switch(result) {
+                                        case 0:
+                                            System.out.println("✓ Vote successful for document: " + citizenDocument);
+                                            break;
+                                        case 1:
+                                            System.out.println("✗ Citizen does not belong to this table: " + citizenDocument);
+                                            break;
+                                        case 2:
+                                            System.out.println("✗ Citizen already voted: " + citizenDocument);
+                                            break;
+                                        case 3:
+                                            System.out.println("✗ Citizen not found: " + citizenDocument);
+                                            break;
+                                        default:
+                                            System.out.println("? Unknown result code: " + result);
+                                            break;
+                                    }
+                                } catch (NumberFormatException e) {
+                                    System.err.println("Invalid candidate ID format. Must be an integer.");
+                                }
+                            } else {
+                                System.err.println("Usage: simplevote <citizenDocument> <candidateId>");
                             }
                             break;
                         case "candidates":
@@ -115,6 +145,7 @@ public class VotingTableMain {
                             break;
                         case "status":
                             System.out.println("Election active at this table: " + votingTableImpl.isElectionActive());
+                            System.out.println("Table ID: " + tableIdStr + " (numeric: " + numericTableId + ")");
                             break;
                         case "exit":
                             running = false;
@@ -123,7 +154,7 @@ public class VotingTableMain {
                             if (!command.isEmpty()) {
                                 System.err.println("Unknown command: " + command);
                             }
-                            System.out.println("Available commands: vote <citizenDocument> <candidateId> | candidates | status | exit");
+                            System.out.println("Available commands: vote <citizenDocument> <candidateId> | simplevote <citizenDocument> <candidateId> | candidates | status | exit");
                             break;
                     }
                 } catch (com.zeroc.Ice.CommunicatorDestroyedException e) {

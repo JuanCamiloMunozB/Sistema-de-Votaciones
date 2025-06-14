@@ -13,10 +13,25 @@ public class QueryStationMain {
         try (Communicator communicator = Util.initialize(args, "config.query.cfg");
              Scanner scanner = new Scanner(System.in)) {
 
+            // Conectar al Proxy Cache usando la configuración
             Properties props = communicator.getProperties();
-            String proxyCacheProxy = props.getProperty("ProxyCache.Proxy");
-            ObjectPrx proxyCacheBase = communicator.stringToProxy(proxyCacheProxy);
+            String proxyCacheProxyStr = props.getProperty("ProxyCache.Proxy");
+            
+            if (proxyCacheProxyStr == null || proxyCacheProxyStr.trim().isEmpty()) {
+                System.err.println("Error: ProxyCache.Proxy property not found in configuration");
+                return;
+            }
+            
+            System.out.println("Connecting to Proxy Cache: " + proxyCacheProxyStr);
+            ObjectPrx proxyCacheBase = communicator.stringToProxy(proxyCacheProxyStr);
             ServerQueryServicePrx proxyCacheService = ServerQueryServicePrx.checkedCast(proxyCacheBase);
+            
+            if (proxyCacheService == null) {
+                System.err.println("Error: Could not connect to Proxy Cache Service");
+                return;
+            }
+            System.out.println("Successfully connected to Proxy Cache Service");
+            
             ObjectAdapter adapter = communicator.createObjectAdapter("QueryStationAdapter");
             
             queryStationImpl = new QueryStationImpl(proxyCacheService);
@@ -27,6 +42,7 @@ public class QueryStationMain {
                 adapter.createProxy(Util.stringToIdentity("QueryStation"))
             );
             
+            System.out.println("Query Station ready on port 9092");
             startCLI(scanner);
             
         } catch (Exception e) {
@@ -43,7 +59,7 @@ public class QueryStationMain {
     private static void startCLI(Scanner scanner) {
         boolean running = true;
         System.out.println("\nQuery Station CLI");
-        System.out.println("Commands: query <document> | exit");
+        System.out.println("Commands: query <document> | test | exit");
         
         while (running) {
             System.out.print("> ");
@@ -60,7 +76,9 @@ public class QueryStationMain {
                             System.err.println("Usage: query <document>");
                         }
                         break;
-                        
+                    case "test":
+                        handleTestQuery();
+                        break;
                     case "exit":
                         running = false;
                         break;
@@ -69,7 +87,7 @@ public class QueryStationMain {
                         if (!command.isEmpty()) {
                             System.err.println("Unknown command: " + command);
                         }
-                        System.out.println("Available commands: query <document> | exit");
+                        System.out.println("Available commands: query <document> | test | exit");
                         break;
                 }
             } catch (Exception e) {
@@ -99,5 +117,17 @@ public class QueryStationMain {
         } catch (Exception e) {
             System.err.println("Error querying document " + document + ": " + e.getMessage());
         }
+    }
+    
+    private static void handleTestQuery() {
+        String[] testDocuments = {"1", "2", "3", "123456789"};
+        
+        System.out.println("Running test queries...");
+        for (String doc : testDocuments) {
+            System.out.println("Testing document: " + doc);
+            handleSingleQuery(doc);
+            System.out.println("---");
+        }
+        System.out.println("Test completed.");
     }
 }

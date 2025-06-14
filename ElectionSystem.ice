@@ -52,7 +52,7 @@ module ElectionSystem {
     };
     
     interface EventObserver {
-        void notify(ElectionEvent event);
+        void notifyEvent(ElectionEvent event);
     };
 
     interface ElectionActivityObserver {
