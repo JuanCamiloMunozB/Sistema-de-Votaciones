@@ -276,7 +276,7 @@ public class ServerImpl implements ServerService {
         );
     }
 
-     @Override
+    @Override
     public String findVotingStationByDocument(String document, Current current) {
         try {
             Optional<Citizen> citizenOpt = citizenRepository.findByDocument(document);
@@ -286,12 +286,12 @@ public class ServerImpl implements ServerService {
                 VotingStation station = citizen.getVotingTable().getVotingStation();
                 
                 String locationInfo = String.format(
-                    "Sitio: %s | Dirección: %s | Municipio: %s | Departamento: %s | Código: %d",
+                    "Usted debe votar en %s ubicado en %s en %s, %s en la mesa %d.",
                     station.getName(),
                     station.getAddress(),
                     station.getMunicipality().getName(),
                     station.getMunicipality().getDepartment().getName(),
-                    station.getConsecutive()
+                    citizen.getVotingTable().getId()
                 );
                 
                 return locationInfo;
