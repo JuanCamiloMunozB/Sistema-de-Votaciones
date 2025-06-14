@@ -1,37 +1,52 @@
 <icegrid>
     <application name="ElectionSystemApp">
-        <node name="Node1">
-            <!-- Servidor Principal -->
-            <server id="ServerServiceInstance1"
-                    exe="java"
-                    activation="on-demand" 
-                    application-distrib="false"> 
+        <!-- Server Template para los servidores replicados -->
+        <server-template id="ServerServiceTemplate">
+            <parameter name="index"/>
+            <parameter name="port"/>
+            <parameter name="exepath" default="..\Sistema-de-Votaciones\server\build\libs\server.jar"/>
+            <server id="ServerServiceInstance${index}" exe="java" activation="always" activation-timeout="120" application-distrib="false">
                 <option>-Xms6144m</option>
                 <option>-Xmx6144m</option>
                 <option>-cp</option>
-                <option>..\Sistema-de-Votaciones\server\build\libs\server.jar</option>
+                <option>${exepath}</option>
                 <option>ServerMain</option>
-                <property name="Ice.Config" value="..\Sistema-de-Votaciones\server\src\main\resources\config.server.cfg"/>
-                <adapter name="ServerAdapter" id="ServerAdapterID">
-                    <object identity="ServerService" type="::ElectionSystem::ServerService"/>
+                <option>--Ice.Config=..\Sistema-de-Votaciones\server\src\main\resources\config.server${index}.cfg</option>
+                <property name="Ice.Config" value="..\Sistema-de-Votaciones\server\src\main\resources\config.server${index}.cfg"/>
+                <property name="Server.Instance.Id" value="ServerInstance${index}"/>
+                <!-- Adaptador con endpoints TCP específicos -->
+                <adapter name="ServerAdapter${index}" id="ServerAdapter${index}ID" replica-group="ServerServiceReplicas" endpoints="tcp -p ${port}">
+                    <!-- No definir object aquí - se define en el replica group -->
                 </adapter>
             </server>
+        </server-template>
+
+        <node name="Node1">
+            <!-- Instancias de servidores usando el template con puertos específicos -->
+            <server-instance template="ServerServiceTemplate" index="1" port="10001"/>
+            <server-instance template="ServerServiceTemplate" index="2" port="10002"/>
 
             <!-- Control Center -->
             <server id="ControlCenterServiceInstance1"
                     exe="java"
-                    activation="on-demand">
+                    activation="on-demand"
+                    activation-timeout="60">
                 <option>-Xms6144m</option>
                 <option>-Xmx6144m</option>
                 <option>-cp</option>
                 <option>..\Sistema-de-Votaciones\control_center\build\libs\control_center.jar</option>
                 <option>ControlCenterMain</option>
                 <property name="Ice.Config" value="..\Sistema-de-Votaciones\control_center\src\main\resources\config.control.cfg"/>
-                <adapter name="ControlCenterAdapter" id="ControlCenterAdapterID">
+                <adapter name="ControlCenterAdapter" id="ControlCenterAdapterID" endpoints="tcp -p 10003">
                     <object identity="ControlCenterService" type="::ElectionSystem::ControlCenterService"/>
                 </adapter>
             </server>
-
         </node>
+
+        <!-- Replica Group que maneja los objetos duplicados -->
+        <replica-group id="ServerServiceReplicas">
+            <load-balancing type="round-robin"/>
+            <object identity="ServerService" type="::ElectionSystem::ServerService"/>
+        </replica-group>
     </application>
 </icegrid>
