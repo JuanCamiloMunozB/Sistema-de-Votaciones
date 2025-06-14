@@ -23,8 +23,9 @@ public class CitizenRepository extends GenericRepository<Citizen, Integer> {
     public Optional<Citizen> findByDocument(String document) {
         return JPAUtil.executeInTransaction(this.entityManager, entityManager -> {
             TypedQuery<Citizen> query = entityManager.createQuery(
-                "SELECT c FROM Citizen c WHERE c.document = :document", Citizen.class);
+                "SELECT c FROM Citizen c JOIN FETCH c.votingTable WHERE c.document = :document", Citizen.class);
             query.setParameter("document", document);
+            query.setHint("org.hibernate.timeout", 5000); // 5 second timeout
             return query.getResultStream().findFirst();
         });
     }
@@ -62,7 +63,6 @@ public class CitizenRepository extends GenericRepository<Citizen, Integer> {
 
                     citizensForCurrentTable.addAll(pageResults);
                     pageNumber++;
-                    System.out.println("[CitizenRepository] Loaded " + pageResults.size() + " citizens for table ID " + table.getId() + " (page " + (pageNumber-1) + ")");
                 } while (!pageResults.isEmpty() && pageResults.size() == PAGE_SIZE);
                 if (!citizensForCurrentTable.isEmpty()) {
                     citizensByTable.put(table, citizensForCurrentTable);
@@ -71,7 +71,6 @@ public class CitizenRepository extends GenericRepository<Citizen, Integer> {
                     System.out.println("[CitizenRepository] No citizens found for table ID " + table.getId());
                 }
             }
-            System.out.println("[CitizenRepository] Finished grouping citizens. Tables with citizens: " + citizensByTable.size());
             return citizensByTable;
         });
     }

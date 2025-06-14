@@ -14,9 +14,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.zeroc.Ice.Current;
+import com.zeroc.Ice.TimeoutException;
+import com.zeroc.Ice.ConnectFailedException;
 
 public class ServerImpl implements ServerService {
     
@@ -33,6 +37,7 @@ public class ServerImpl implements ServerService {
     private final Map<VotingTable, List<Citizen>> citizensByTableCache;
     
     private final Map<String, EventObserverPrx> subscribers = new ConcurrentHashMap<>();
+    private static final int NOTIFICATION_TIMEOUT_SECONDS = 2;
     
     public ServerImpl(ElectionRepository electionRepository, 
                       CandidateRepository candidateRepository, 
@@ -40,7 +45,6 @@ public class ServerImpl implements ServerService {
                       CitizenRepository citizenRepository, 
                       VotingTableRepository votingTableRepository,
                       VotedCitizenRepository votedCitizenRepository) {
-        System.out.println("ServerImpl: Constructor - START");
         this.electionRepository = electionRepository;
         this.candidateRepository = candidateRepository;
         this.voteRepository = voteRepository;
@@ -48,38 +52,23 @@ public class ServerImpl implements ServerService {
         this.votingTableRepository = votingTableRepository;
         this.votedCitizenRepository = votedCitizenRepository;
         this.citizensByTableCache = new ConcurrentHashMap<>();
-        System.out.println("ServerImpl: Constructor - Repositories assigned.");
         try {
             initElectionBasicData();
         } catch (Throwable t) {
-            System.err.println("ServerImpl: CRITICAL ERROR during initElectionBasicData: " + t.getMessage());
+            System.err.println("ServerImpl: CRITICAL ERROR during initialization: " + t.getMessage());
             t.printStackTrace(System.err);
             throw t;
         }
-        System.out.println("ServerImpl: Constructor - END");
     }
 
     private void initElectionBasicData() {
-        System.out.println("ServerImpl.initElectionBasicData: START");
         if (this.currentElection != null) {
-            System.out.println("ServerImpl.initElectionBasicData: Already initialized, returning.");
             return;
         }
-        System.out.println("ServerImpl.initElectionBasicData: Finding current election...");
         this.currentElection = electionRepository.findCurrentElection()
-            .orElseThrow(() -> {
-                System.err.println("ServerImpl.initElectionBasicData: No current election found - RuntimeException.");
-                return new RuntimeException("No current election found");
-            });
-        System.out.println("ServerImpl.initElectionBasicData: Current election found: " + this.currentElection.getName());
-        
-        System.out.println("ServerImpl.initElectionBasicData: Finding candidates...");
+            .orElseThrow(() -> new RuntimeException("No current election found"));
         this.candidates = candidateRepository.findCandidatesByElectionId(this.currentElection.getId());
-        System.out.println("ServerImpl.initElectionBasicData: Candidates found: " + (this.candidates != null ? this.candidates.size() : "null"));
-        System.out.println("ServerImpl.initElectionBasicData: Grouping voting tables by station...");
         this.votingTablesByStation = votingTableRepository.groupVotingTablesByStation();
-        System.out.println("ServerImpl.initElectionBasicData: Voting tables grouped: " + (this.votingTablesByStation != null ? this.votingTablesByStation.size() : "null"));
-        System.out.println("ServerImpl.initElectionBasicData: END - Basic data loaded. Citizens will be loaded on demand.");
     }
 
     @Override
@@ -93,18 +82,13 @@ public class ServerImpl implements ServerService {
     private List<Citizen> getOrLoadCitizensForTable(VotingTable votingTable) {
         List<Citizen> citizens = citizensByTableCache.get(votingTable);
         if (citizens == null) {
-            System.out.println("[ServerImpl] Cache miss for citizens of table ID: " + votingTable.getId() + ". Loading from repository...");
             citizens = citizenRepository.findByVotingTableId(votingTable.getId());
             if (citizens != null) {
-                System.out.println("[ServerImpl] Loaded " + citizens.size() + " citizens for table ID: " + votingTable.getId());
                 citizensByTableCache.put(votingTable, citizens);
             } else {
-                System.out.println("[ServerImpl] No citizens found in repository for table ID: " + votingTable.getId());
                 citizens = new ArrayList<>();
                 citizensByTableCache.put(votingTable, citizens);
             }
-        } else {
-            System.out.println("[ServerImpl] Cache hit for citizens of table ID: " + votingTable.getId() + ". Found " + citizens.size() + " citizens.");
         }
         return citizens;
     }
@@ -117,11 +101,8 @@ public class ServerImpl implements ServerService {
         
         List<VotingTable> votingTablesForStation = votingTablesByStation.get(controlCenterId);
         if (votingTablesForStation == null || votingTablesForStation.isEmpty()) {
-            System.out.println("[ServerImpl] No voting tables found for station/controlCenterId: " + controlCenterId);
             return new VotingTableData[0];
         }
-
-        System.out.println("[ServerImpl] Preparing VotingTableData for " + votingTablesForStation.size() + " tables in station: " + controlCenterId);
         
         return votingTablesForStation.stream()
             .map(this::convertVotingTableToVotingTableData)
@@ -150,7 +131,6 @@ public class ServerImpl implements ServerService {
             .findFirst()
             .orElseThrow(() -> new CandidateNotFound("Candidate with ID " + vote.candidateId + " not found"));
 
-
         votedCitizenRepository.save(new VotedCitizen(citizen.getId()));
 
         Vote newVoteToSave = new Vote();
@@ -162,7 +142,7 @@ public class ServerImpl implements ServerService {
         }
 
         voteRepository.save(newVoteToSave);
-        System.out.println("Anonymous vote registered. Citizen with document: " + vote.citizenDocument + " (ID: " + citizen.getId() + ") marked as voted.");
+        System.out.println("Vote registered for citizen: " + vote.citizenDocument);
 
         Map<String, String> details = new HashMap<>();
         details.put("citizenDocument", vote.citizenDocument);
@@ -180,7 +160,6 @@ public class ServerImpl implements ServerService {
             details
         );
         notifySubscribers(event);
-        System.out.println("ServerImpl.registerVote: Exiting successfully for document " + vote.citizenDocument);
     }
 
     @Override
@@ -190,40 +169,56 @@ public class ServerImpl implements ServerService {
             return;
         }
 
-        subscribers.put(observerIdentity, observer);
-        System.out.println("Observer '" + observerIdentity + "' subscribed.");
+        try {
+            observer.ice_ping();
+            subscribers.put(observerIdentity, observer);
+            System.out.println("Observer '" + observerIdentity + "' subscribed successfully.");
+        } catch (Exception e) {
+            System.err.println("Failed to subscribe observer '" + observerIdentity + "': " + e.getMessage());
+        }
     }
 
     @Override
     public void unsubscribe(String observerIdentity, Current current) {
         if (observerIdentity == null || observerIdentity.isEmpty()) {
-            System.err.println("Unsubscribe attempt with empty identity.");
             return;
         }
         EventObserverPrx removed = subscribers.remove(observerIdentity);
         if (removed != null) {
             System.out.println("Observer '" + observerIdentity + "' unsubscribed.");
-        } else {
-            System.out.println("Observer '" + observerIdentity + "' not found for unsubscription.");
         }
     }
 
     private void notifySubscribers(ElectionEvent event) {
-        System.out.println("Notifying " + subscribers.size() + " subscribers of event: " + event.type);
         List<Map.Entry<String, EventObserverPrx>> toNotify = new ArrayList<>(subscribers.entrySet());
 
         for (Map.Entry<String, EventObserverPrx> entry : toNotify) {
             String identity = entry.getKey();
             EventObserverPrx observer = entry.getValue();
-            try {
-                observer._notify(event);
-                System.out.println("Successfully notified observer: " + identity);
-            } catch (com.zeroc.Ice.ObjectNotExistException | com.zeroc.Ice.CommunicatorDestroyedException e) {
-                System.err.println("Observer '" + identity + "' seems to be down. Removing: " + e.getMessage());
-                subscribers.remove(identity);
-            } catch (Exception e) {
-                System.err.println("Failed to notify observer '" + identity + "': " + e.getMessage());
-            }
+            
+            CompletableFuture.runAsync(() -> {
+                try {
+                    if (observer == null) {
+                        subscribers.remove(identity);
+                        return;
+                    }
+                    
+                    EventObserverPrx timeoutObserver = observer.ice_timeout(NOTIFICATION_TIMEOUT_SECONDS * 1000);
+                    timeoutObserver._notify(event);
+                    
+                } catch (com.zeroc.Ice.ObjectNotExistException e) {
+                    subscribers.remove(identity);
+                } catch (com.zeroc.Ice.CommunicatorDestroyedException e) {
+                    subscribers.remove(identity);
+                } catch (TimeoutException e) {
+                    System.err.println("Timeout notifying observer '" + identity + "'");
+                } catch (ConnectFailedException e) {
+                    subscribers.remove(identity);
+                } catch (Exception e) {
+                    System.err.println("Failed to notify observer '" + identity + "': " + e.getMessage());
+                }
+            }).orTimeout(NOTIFICATION_TIMEOUT_SECONDS + 1, TimeUnit.SECONDS)
+            .exceptionally(throwable -> null);
         }
     }
 
@@ -284,7 +279,7 @@ public class ServerImpl implements ServerService {
                 Citizen citizen = citizenOpt.get();
                 VotingStation station = citizen.getVotingTable().getVotingStation();
                 
-                String locationInfo = String.format(
+                return String.format(
                     "Usted debe votar en %s ubicado en %s en %s, %s en la mesa %d.",
                     station.getName(),
                     station.getAddress(),
@@ -292,14 +287,12 @@ public class ServerImpl implements ServerService {
                     station.getMunicipality().getDepartment().getName(),
                     citizen.getVotingTable().getId()
                 );
-                
-                return locationInfo;
             } else {
                 return null;
             }
             
         } catch (Exception e) {
-            System.err.println("ServerServiceImpl.findVotingStationByDocument: Error for document " + document + ": " + e.getMessage());
+            System.err.println("Error finding voting station for document " + document + ": " + e.getMessage());
             return null;
         }
     }

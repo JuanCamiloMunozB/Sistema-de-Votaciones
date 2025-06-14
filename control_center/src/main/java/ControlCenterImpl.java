@@ -23,7 +23,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.ConcurrentHashMap;import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 public class ControlCenterImpl implements ControlCenterService {
@@ -68,7 +68,8 @@ public class ControlCenterImpl implements ControlCenterService {
 
             if (observerPrx != null) {
                 System.out.println("ControlCenter [" + this.controlCenterId + "] intentando suscribirse con observador '" + observerIceIdentity.name + "'...");
-                this.serverService.subscribe( observerPrx, observerIceIdentity.name);
+                System.out.println("ControlCenter [" + this.controlCenterId + "] observerPrx: " + observerPrx.toString());
+                this.serverService.subscribe(observerPrx, observerIceIdentity.name);
                 System.out.println("ControlCenter [" + this.controlCenterId + "] suscrito exitosamente a eventos.");
             } else {
                 System.err.println("Error: ControlCenter [" + this.controlCenterId + "] no pudo crear el proxy del observador para la suscripción.");
@@ -90,29 +91,37 @@ public class ControlCenterImpl implements ControlCenterService {
 
         @Override
         public void _notify(ElectionEvent event, Current current) {
-            System.out.println("ControlCenter Observer ('" + this.ownerControlCenterId + "') recibió evento: " + event.type.name());
-            System.out.println("  Timestamp: " + event.timestamp);
-            if (event.details != null) {
-                 System.out.println("  Details: " + event.details);
-                switch (event.type) {
-                    case VoteRegistered:
-                        String citizenId = event.details.get("citizenId");
-                        String candidateId = event.details.get("candidateId");
-                        System.out.println("  Detalle de Voto Registrado: Ciudadano=" + citizenId + ", Candidato=" + candidateId);
-                        break;
-                    case ElectionStarted:
-                        System.out.println("  La Elección ha comenzado: " + event.details.get("electionName"));
-                        break;
-                    case ElectionEnded:
-                        System.out.println("  La Elección ha terminado: " + event.details.get("electionName"));
-                        break;
-                    default:
-                        System.out.println("  Tipo de evento desconocido (" + event.type.name() + ") recibido.");
-                        break;
+            // Process notification in separate thread to avoid blocking
+            new Thread(() -> {
+                try {
+                    System.out.println("ControlCenter Observer ('" + this.ownerControlCenterId + "') recibió evento: " + event.type.name());
+                    System.out.println("  Timestamp: " + event.timestamp);
+                    if (event.details != null) {
+                         System.out.println("  Details: " + event.details);
+                        switch (event.type) {
+                            case VoteRegistered:
+                                String citizenId = event.details.get("citizenId");
+                                String candidateId = event.details.get("candidateId");
+                                System.out.println("  Detalle de Voto Registrado: Ciudadano=" + citizenId + ", Candidato=" + candidateId);
+                                break;
+                            case ElectionStarted:
+                                System.out.println("  La Elección ha comenzado: " + event.details.get("electionName"));
+                                break;
+                            case ElectionEnded:
+                                System.out.println("  La Elección ha terminado: " + event.details.get("electionName"));
+                                break;
+                            default:
+                                System.out.println("  Tipo de evento desconocido (" + event.type.name() + ") recibido.");
+                                break;
+                        }
+                    } else {
+                        System.out.println("  Details: (null)");
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error in EventObserver._notify for ControlCenter '" + this.ownerControlCenterId + "': " + e.getMessage());
+                    e.printStackTrace(System.err);
                 }
-            } else {
-                System.out.println("  Details: (null)");
-            }
+            }).start();
         }
     }
 
