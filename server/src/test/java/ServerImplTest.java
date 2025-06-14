@@ -89,8 +89,9 @@ class ServerImplTest {
 
         when(electionRepository.findCurrentElection()).thenReturn(Optional.of(currentElection));
         when(candidateRepository.findCandidatesByElectionId(currentElection.getId())).thenReturn(candidates);
+         
         when(votingTableRepository.groupVotingTablesByStation()).thenReturn(votingTablesByStationMapSetup);
-
+        
         serverImpl = new ServerImpl(electionRepository, candidateRepository, voteRepository, citizenRepository, votingTableRepository, votedCitizenRepository);
     }
 

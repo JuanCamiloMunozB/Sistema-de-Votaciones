@@ -75,11 +75,9 @@ public class ServerImpl implements ServerService {
         System.out.println("ServerImpl.initElectionBasicData: Finding candidates...");
         this.candidates = candidateRepository.findCandidatesByElectionId(this.currentElection.getId());
         System.out.println("ServerImpl.initElectionBasicData: Candidates found: " + (this.candidates != null ? this.candidates.size() : "null"));
-
         System.out.println("ServerImpl.initElectionBasicData: Grouping voting tables by station...");
         this.votingTablesByStation = votingTableRepository.groupVotingTablesByStation();
         System.out.println("ServerImpl.initElectionBasicData: Voting tables grouped: " + (this.votingTablesByStation != null ? this.votingTablesByStation.size() : "null"));
-
         System.out.println("ServerImpl.initElectionBasicData: END - Basic data loaded. Citizens will be loaded on demand.");
     }
 

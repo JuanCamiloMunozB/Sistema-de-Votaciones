@@ -1,6 +1,7 @@
 import ElectionSystem.*;
 import com.zeroc.Ice.Current;
 import com.zeroc.Ice.Identity;
+import com.zeroc.Ice.NotRegisteredException;
 import com.zeroc.Ice.ObjectAdapter;
 import com.zeroc.Ice.ObjectPrx;
 import com.zeroc.Ice.Util;
@@ -186,9 +187,9 @@ public class ControlCenterImpl implements ControlCenterService {
             dequeuePendingVote();
             System.out.println("ControlCenter [" + controlCenterId + "]: Pending vote sent successfully for " 
                                 + vote.citizenDocument);
-        } catch (ConnectTimeoutException | ConnectionRefusedException e) {
-            System.err.println("ControlCenter [" + controlCenterId 
-                               + "]: Failed to send pending vote, server unavailable. Will retry later: " 
+        } catch (ConnectTimeoutException | ConnectionRefusedException | NotRegisteredException e) {
+            System.err.println("ControlCenter [" + controlCenterId
+                               + "]: Failed to send pending vote, server unavailable. Will retry later: "
                                + e.getMessage());
             break;
         } catch (Exception e) {
@@ -274,7 +275,7 @@ public class ControlCenterImpl implements ControlCenterService {
             System.err.println("ControlCenterImpl.submitVote: CAUGHT BUSINESS EXCEPTION: " + e.ice_name() + " - " + e.getMessage()); 
             System.err.println("Failed to submit vote: " + e.ice_name() + " - " + e.getMessage());
             throw e;
-        } catch (ConnectTimeoutException | ConnectionRefusedException e) {
+        } catch (ConnectTimeoutException | ConnectionRefusedException | NotRegisteredException e) {
            System.err.println("ControlCenterImpl.submitVote: Server unavailable, adding vote to pending queue: " + e.getMessage());
             enqueuePendingVote(vote);
         } catch (Exception e) {
