@@ -22,8 +22,17 @@ module ElectionSystem {
         string timestamp;
     }
 
+    struct CandidateResult {
+    int candidateId;
+    string candidateName;
+    int totalVotes;
+    };
+
     sequence<CandidateData> CandidateDataSeq;
     sequence<CitizenData> CitizenDataSeq;
+    sequence<CandidateResult> CandidateResultSeq;
+
+    dictionary<int, CandidateResultSeq> TableResultsMap;
 
     struct VotingTableData {
         int id;
@@ -87,6 +96,9 @@ module ElectionSystem {
         void subscribe(EventObserver* observer, string observerIdentity);
         void unsubscribe(string observerIdentity);
         CandidateDataSeq getCandidates();
+        string findVotingStationByDocument(string document);
+        CandidateResultSeq getGlobalResults();
+        TableResultsMap getResultsByVotingTable();
     }
 
     interface ControlCenterService {
@@ -99,10 +111,22 @@ module ElectionSystem {
         void unsubscribeElectionActivity(string votingTableIdentity);
     }
 
+    interface VoteStation{
+        int vote(string document, int candidateId);
+    }
+
     interface VotingTableService {
         void emitVote(VoteData vote) throws ElectionInactive, CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable;
     }
 
-    interface VotingTableCombinedService extends VotingTableService, ElectionActivityObserver {
+    interface VotingTableCombinedService extends VotingTableService, ElectionActivityObserver, VoteStation {
+    }
+
+    interface queryStation {
+        string query(string document);
+    }
+
+    interface ServerQueryService {
+        string findVotingStationByDocument(string document);
     }
 }

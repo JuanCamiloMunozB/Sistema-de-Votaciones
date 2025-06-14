@@ -1,10 +1,10 @@
 import ElectionSystem.*;
 import models.elections.*;
 import models.votaciones.Citizen;
+import models.votaciones.VotingStation;
 import models.votaciones.VotingTable;
 import repositories.elections.*;
 import repositories.votaciones.*;
-import repositories.elections.VotedCitizenRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -12,7 +12,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import com.zeroc.Ice.Current;
 
@@ -74,11 +76,9 @@ public class ServerImpl implements ServerService {
         System.out.println("ServerImpl.initElectionBasicData: Finding candidates...");
         this.candidates = candidateRepository.findCandidatesByElectionId(this.currentElection.getId());
         System.out.println("ServerImpl.initElectionBasicData: Candidates found: " + (this.candidates != null ? this.candidates.size() : "null"));
-
         System.out.println("ServerImpl.initElectionBasicData: Grouping voting tables by station...");
         this.votingTablesByStation = votingTableRepository.groupVotingTablesByStation();
         System.out.println("ServerImpl.initElectionBasicData: Voting tables grouped: " + (this.votingTablesByStation != null ? this.votingTablesByStation.size() : "null"));
-
         System.out.println("ServerImpl.initElectionBasicData: END - Basic data loaded. Citizens will be loaded on demand.");
     }
 
@@ -273,5 +273,69 @@ public class ServerImpl implements ServerService {
             candidate.getLastName(),
             candidate.getParty()
         );
+    }
+
+    @Override
+    public String findVotingStationByDocument(String document, Current current) {
+        try {
+            Optional<Citizen> citizenOpt = citizenRepository.findByDocument(document);
+            
+            if (citizenOpt.isPresent()) {
+                Citizen citizen = citizenOpt.get();
+                VotingStation station = citizen.getVotingTable().getVotingStation();
+                
+                String locationInfo = String.format(
+                    "Usted debe votar en %s ubicado en %s en %s, %s en la mesa %d.",
+                    station.getName(),
+                    station.getAddress(),
+                    station.getMunicipality().getName(),
+                    station.getMunicipality().getDepartment().getName(),
+                    citizen.getVotingTable().getId()
+                );
+                
+                return locationInfo;
+            } else {
+                return null;
+            }
+            
+        } catch (Exception e) {
+            System.err.println("ServerServiceImpl.findVotingStationByDocument: Error for document " + document + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public CandidateResult[] getGlobalResults(Current current) {
+    Map<Integer, Long> votesByCandidate = candidates.stream().collect(Collectors.toMap(
+        Candidate::getId,
+        c -> voteRepository.countByCandidateId(c.getId())
+    ));
+
+    return candidates.stream()
+        .map(c -> new CandidateResult(
+            c.getId(),
+            c.getFirstName() + " " + c.getLastName(),
+            votesByCandidate.getOrDefault(c.getId(), 0L).intValue()
+        )).toArray(CandidateResult[]::new);
+    }
+
+    @Override
+    public Map<Integer, CandidateResult[]> getResultsByVotingTable(Current current) {
+    Map<Integer, Map<Integer, Integer>> rawVotes = voteRepository.countVotesGroupedByTableAndCandidate();
+
+    Map<Integer, CandidateResult[]> tableResults = new HashMap<>();
+    for (Map.Entry<Integer, Map<Integer, Integer>> entry : rawVotes.entrySet()) {
+        int tableId = entry.getKey();
+        Map<Integer, Integer> candidateVotes = entry.getValue();
+
+        List<CandidateResult> results = new ArrayList<>();
+        for (Candidate c : candidates) {
+            int count = candidateVotes.getOrDefault(c.getId(), 0);
+            results.add(new CandidateResult(c.getId(), c.getFirstName() + " " + c.getLastName(), count));
+        }
+        tableResults.put(tableId, results.toArray(new CandidateResult[0]));
+    }
+
+    return tableResults;
     }
 }

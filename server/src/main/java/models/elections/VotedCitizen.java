@@ -1,5 +1,6 @@
 package models.elections;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -15,6 +16,7 @@ import lombok.AllArgsConstructor;
 public class VotedCitizen {
 
     @Id
+    @Column(name = "citizen_id")
     private Integer citizenId;
 
 } 

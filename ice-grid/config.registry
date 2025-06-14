@@ -4,7 +4,7 @@ IceGrid.Registry.Server.Endpoints=tcp -h localhost -p 40610
 IceGrid.Registry.Internal.Endpoints=tcp -h localhost -p 40630
 
 # --- Base de Datos de IceGrid (Usando LMDB) ---
-IceGrid.Registry.LMDB.Path=db/registry 
+IceGrid.Registry.LMDB.Path=ice-grid/db/registry 
 
 # Verificador de permisos
 IceGrid.Registry.PermissionsVerifier=IceGrid/NullPermissionsVerifier

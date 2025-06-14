@@ -1,5 +1,9 @@
 package repositories.elections;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import models.elections.Vote;
 import repositories.GenericRepository;
 import utils.JPAUtil;
@@ -56,4 +60,25 @@ public class VoteRepository extends GenericRepository<Vote, Integer> {
                 .getSingleResult()
         );
     }
+
+    public Map<Integer, Map<Integer, Integer>> countVotesGroupedByTableAndCandidate() {
+    return JPAUtil.executeInTransaction(this.entityManager, em -> {
+        List<Object[]> results = em.createQuery(
+            "SELECT v.tableId, v.candidate.id, COUNT(v) FROM Vote v GROUP BY v.tableId, v.candidate.id"
+        ).getResultList();
+
+        Map<Integer, Map<Integer, Integer>> tableToCandidateVotes = new HashMap<>();
+        for (Object[] row : results) {
+            int tableId = (int) row[0];
+            int candidateId = (int) row[1];
+            long count = (long) row[2];
+
+            tableToCandidateVotes
+                .computeIfAbsent(tableId, k -> new HashMap<>())
+                .put(candidateId, (int) count);
+        }
+        return tableToCandidateVotes;
+    });
+    }
+
 }

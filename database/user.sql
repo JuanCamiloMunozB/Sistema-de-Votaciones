@@ -22,16 +22,19 @@ CREATE TABLE candidate (
     CONSTRAINT fk_candidate_election FOREIGN KEY (election_id) REFERENCES election(id)
 );
 
+
 CREATE TABLE votes (
     id SERIAL PRIMARY KEY, 
-    citizen_id INT NOT NULL,
     candidate_id INT NOT NULL,
     election_id INT NOT NULL,
     table_id INT NOT NULL,      
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (citizen_id, election_id),
     CONSTRAINT fk_vote_candidate FOREIGN KEY (candidate_id) REFERENCES candidate(id),
     CONSTRAINT fk_vote_election FOREIGN KEY (election_id) REFERENCES election(id)
+);
+
+CREATE TABLE voted_citizens (
+    citizen_id SERIAL PRIMARY KEY
 );
 
 INSERT INTO election (id, name, start_date, end_date) 

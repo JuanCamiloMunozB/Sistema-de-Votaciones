@@ -46,3 +46,6 @@ gradle-app.setting
 .classpath
 
 **/bin/
+
+ice-grid/
+.vscode/

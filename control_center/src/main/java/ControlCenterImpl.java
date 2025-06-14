@@ -1,6 +1,7 @@
 import ElectionSystem.*;
 import com.zeroc.Ice.Current;
 import com.zeroc.Ice.Identity;
+import com.zeroc.Ice.NotRegisteredException;
 import com.zeroc.Ice.ObjectAdapter;
 import com.zeroc.Ice.ObjectPrx;
 import com.zeroc.Ice.Util;
@@ -9,18 +10,21 @@ import com.zeroc.Ice.ConnectTimeoutException;
 import com.zeroc.Ice.ConnectionRefusedException;
 import com.zeroc.Ice.UnknownException;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.ConcurrentHashMap;
-import ElectionSystem.ElectionActivityObserverPrx;
-import ElectionSystem.CitizenAlreadyVoted;
-import ElectionSystem.CitizenNotFound;
-import ElectionSystem.CandidateNotFound;
-import ElectionSystem.CitizenNotBelongToTable;
-import ElectionSystem.ElectionInactive;
+import java.util.concurrent.ConcurrentHashMap;import java.util.concurrent.ConcurrentHashMap;
+
 
 public class ControlCenterImpl implements ControlCenterService {
     private ServerServicePrx serverService;
@@ -28,6 +32,8 @@ public class ControlCenterImpl implements ControlCenterService {
     private ObjectAdapter adapter;
     Queue<VoteData> pendingVotes = new LinkedList<>();
     private Timer retryTimer = new Timer();
+    private static final String PENDING_VOTES_FILE = "pending_votes.csv";
+    private final Set<String> pendingKeys = new HashSet<>();
     private static final long RETRY_INTERVAL_MS = 60000;
     private EventObserverI observerServant;
     private final Map<String, ElectionActivityObserverPrx> electionActivitySubscribers = new ConcurrentHashMap<>();
@@ -36,6 +42,7 @@ public class ControlCenterImpl implements ControlCenterService {
         this.serverService = serverService;
         this.controlCenterId = controlCenterId;
         this.adapter = adapter;
+        loadPendingVotesFromDisk();
         startRetryTask();
         this.observerServant = new EventObserverI(this.controlCenterId);
     }
@@ -118,27 +125,123 @@ public class ControlCenterImpl implements ControlCenterService {
         }, RETRY_INTERVAL_MS, RETRY_INTERVAL_MS);
     }
 
+    private void loadPendingVotesFromDisk() {
+        File file = new File(PENDING_VOTES_FILE);
+        if (!file.exists()) {
+            return;
+        }
+
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(",", 4);
+                if (parts.length < 4) {
+                    continue;
+                }
+
+                String citizenDocument = parts[0].trim();
+                int candidateId = Integer.parseInt(parts[1].trim());
+                int tableId = Integer.parseInt(parts[2].trim());
+                String timestamp = parts[3].trim();
+
+                VoteData vote = new VoteData(citizenDocument, candidateId, tableId, timestamp);
+                pendingVotes.add(vote);
+
+                String key = buildVoteKey(citizenDocument, candidateId, tableId);
+                pendingKeys.add(key);
+            }
+            System.out.println(
+                "ControlCenter [" + controlCenterId + "]: Loaded " +
+                pendingVotes.size() + " pending votes from disk."
+            );
+        } catch (IOException e) {
+            System.err.println(
+                "ControlCenter [" + controlCenterId +
+                "]: Error reading pending votes file: " + e.getMessage()
+            );
+        }
+    }
+
+
+    
+    private String buildVoteKey(String citizenDocument, int candidateId, int tableId) {
+        return citizenDocument + "|" + candidateId + "|" + tableId;
+    }
+
+
     @Override
     public CandidateData[] getCandidates(Current current) {
         return serverService.getCandidates();
     }
-
     synchronized void processPendingVotes() {
         while (!pendingVotes.isEmpty()) {
-            VoteData vote = pendingVotes.peek();
-            try {
-                serverService.registerVote(vote);
-                pendingVotes.poll();
-                System.out.println("Pending vote sent successfully for document: " + vote.citizenDocument);
-            } catch (ConnectTimeoutException | ConnectionRefusedException e) {
-                System.err.println("Failed to send pending vote, server unavailable. Will retry later: " + e.getMessage());
-                break;
-            } catch (Exception e) {
-                System.err.println("Error sending pending vote: " + e.getMessage());
-                pendingVotes.poll();
+        VoteData vote = pendingVotes.peek();
+        try {
+            serverService.registerVote(vote);
+            dequeuePendingVote();
+            System.out.println("ControlCenter [" + controlCenterId + "]: Pending vote sent successfully for " 
+                                + vote.citizenDocument);
+        } catch (ConnectTimeoutException | ConnectionRefusedException | NotRegisteredException e) {
+            System.err.println("ControlCenter [" + controlCenterId
+                               + "]: Failed to send pending vote, server unavailable. Will retry later: "
+                               + e.getMessage());
+            break;
+        } catch (Exception e) {
+            System.err.println("ControlCenter [" + controlCenterId 
+                               + "]: Error sending pending vote (definitivo), removing from queue: " 
+                               + e.getMessage());
+            dequeuePendingVote(); 
             }
         }
     }
+
+
+    private synchronized void savePendingVotesToDisk() {
+    File file = new File(PENDING_VOTES_FILE);
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file, false))) {
+            for (VoteData vote : pendingVotes) {
+            String line = String.format("%s,%d,%d,%s",
+                    vote.citizenDocument,
+                    vote.candidateId,
+                    vote.tableId,
+                    vote.timestamp);
+            bw.write(line);
+            bw.newLine();
+            }
+        bw.flush();
+    } catch (IOException e) {
+        System.err.println("ControlCenter [" + controlCenterId + "]: Error guardando votos pendientes en disco: " + e.getMessage());
+        }
+    }
+
+   private synchronized void enqueuePendingVote(VoteData vote) {
+    String key = buildVoteKey(vote.citizenDocument, vote.candidateId, vote.tableId);
+    if (pendingKeys.contains(key)) {
+       
+        System.out.println("ControlCenter [" + controlCenterId 
+                           + "]: Vote for " + vote.citizenDocument 
+                           + " (cand=" + vote.candidateId 
+                           + ", table=" + vote.tableId 
+                           + ") already in queue ➔ skipping.");
+        return;
+        }
+  
+    pendingVotes.add(vote);
+    pendingKeys.add(key);
+    savePendingVotesToDisk();
+    }
+
+
+    private synchronized VoteData dequeuePendingVote() {
+    VoteData head = pendingVotes.poll();
+    if (head != null) {
+        String key = buildVoteKey(head.citizenDocument, head.candidateId, head.tableId);
+        pendingKeys.remove(key);
+        savePendingVotesToDisk();
+        }
+    return head;
+    }   
+
 
     @Override
     public VotingTableData getVotingTableData(int tableId, Current current) {
@@ -154,6 +257,7 @@ public class ControlCenterImpl implements ControlCenterService {
     public void endElection(Current current) {
         System.out.println("ControlCenter [" + controlCenterId + "]: Finalizando elección.");
         notifyElectionEnded();
+        exportResultsToCSV();
     }
     @Override
     public void submitVote(VoteData vote, Current current) throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable, ElectionInactive {
@@ -166,12 +270,9 @@ public class ControlCenterImpl implements ControlCenterService {
             System.err.println("ControlCenterImpl.submitVote: CAUGHT BUSINESS EXCEPTION: " + e.ice_name() + " - " + e.getMessage()); 
             System.err.println("Failed to submit vote: " + e.ice_name() + " - " + e.getMessage());
             throw e;
-        } catch (ConnectTimeoutException | ConnectionRefusedException e) {
-            System.err.println("ControlCenterImpl.submitVote: CAUGHT CONNECTION EXCEPTION: " + e.getMessage()); 
-            System.err.println("Server unavailable, adding vote to pending queue: " + e.getMessage());
-            synchronized (this) {
-                pendingVotes.add(vote);
-            }
+        } catch (ConnectTimeoutException | ConnectionRefusedException | NotRegisteredException e) {
+           System.err.println("ControlCenterImpl.submitVote: Server unavailable, adding vote to pending queue: " + e.getMessage());
+            enqueuePendingVote(vote);
         } catch (Exception e) {
             System.err.println("ControlCenterImpl.submitVote: CAUGHT GENERIC EXCEPTION: " + e.getClass().getName() + " - " + e.getMessage()); 
             e.printStackTrace(System.err);
@@ -238,4 +339,39 @@ public class ControlCenterImpl implements ControlCenterService {
             System.out.println("ControlCenter [" + controlCenterId + "]: Mesa de votación '" + votingTableIdentity + "' no encontrada para desuscripción.");
         }
     }
+
+    private void exportResultsToCSV() {
+    try {
+        System.out.println("Exportando resultados...");
+
+        // Archivo global
+        CandidateResult[] globalResults = serverService.getGlobalResults();
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("resume.csv"))) {
+            writer.write("candidateId,candidateName,totalVotes\n");
+            for (CandidateResult r : globalResults) {
+                writer.write(String.format("%d,%s,%d\n", r.candidateId, r.candidateName, r.totalVotes));
+            }
+        }
+
+        // Archivos por mesa
+        Map<Integer, CandidateResult[]> perTableResults = serverService.getResultsByVotingTable();
+        for (Map.Entry<Integer, CandidateResult[]> entry : perTableResults.entrySet()) {
+            int tableId = entry.getKey();
+            CandidateResult[] tableResults = entry.getValue();
+            String fileName = "partial-" + tableId + ".csv";
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
+                writer.write("candidateId,candidateName,totalVotes\n");
+                for (CandidateResult r : tableResults) {
+                    writer.write(String.format("%d,%s,%d\n", r.candidateId, r.candidateName, r.totalVotes));
+                }
+            }
+        }
+
+        System.out.println(" Exportación de resultados completada.");
+    } catch (Exception e) {
+        System.err.println(" Error al exportar resultados: " + e.getMessage());
+        e.printStackTrace();
+    }
+    }
+
 }
