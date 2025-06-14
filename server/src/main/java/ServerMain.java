@@ -1,6 +1,7 @@
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.ObjectAdapter;
 import com.zeroc.Ice.Util;
+import com.zeroc.Ice.Properties;
 
 import utils.JPAUtil;
 import repositories.elections.*;
@@ -12,15 +13,21 @@ public class ServerMain {
     public static void main(String[] args) {
         Communicator communicator = null;
         try {
-            communicator = Util.initialize(args, "config.server.cfg");
-            System.out.println("ServerMain: Initializing JPAUtil...");
+            communicator = Util.initialize(args);
+            
+            // Obtener el ID de la instancia del servidor desde las propiedades
+            Properties props = communicator.getProperties();
+            String instanceId = props.getProperty("Server.Instance.Id");
+            
+            System.out.println("ServerMain (" + instanceId + "): Initializing JPAUtil...");
             JPAUtil.initialize(communicator);
-            System.out.println("ServerMain: JPAUtil initialized.");
+            System.out.println("ServerMain (" + instanceId + "): JPAUtil initialized.");
 
-            System.out.println("ServerMain: Creating ObjectAdapter 'ServerAdapter'...");
+            System.out.println("ServerMain (" + instanceId + "): Creating ObjectAdapter 'ServerAdapter'...");
             ObjectAdapter adapter = communicator.createObjectAdapter("ServerAdapter");
-            System.out.println("ServerMain: ObjectAdapter 'ServerAdapter' created.");
+            System.out.println("ServerMain (" + instanceId + "): ObjectAdapter created.");
 
+            // Crear repositorios
             ElectionRepository electionRepository = new ElectionRepository();
             CandidateRepository candidateRepository = new CandidateRepository();
             VoteRepository voteRepository = new VoteRepository();
@@ -28,23 +35,32 @@ public class ServerMain {
             VotingTableRepository votingTableRepository = new VotingTableRepository();
             VotedCitizenRepository votedCitizenRepository = new VotedCitizenRepository();
 
-            System.out.println("ServerMain: Adding ServerImpl to adapter with identity 'ServerService'...");
-            adapter.add(new ServerImpl(electionRepository, candidateRepository, voteRepository, citizenRepository, votingTableRepository, votedCitizenRepository), 
-                        Util.stringToIdentity("ServerService"));
-            System.out.println("ServerMain: ServerImpl added to adapter.");
+            // Determinar la identidad basada en la instancia
+            String identity = "ServerService";
+            if ("ServerInstance1".equals(instanceId)) {
+                identity = "ServerService1";
+            } else if ("ServerInstance2".equals(instanceId)) {
+                identity = "ServerService2";
+            }
 
+            System.out.println("ServerMain (" + instanceId + "): Adding ServerImpl to adapter with identity '" + identity + "'...");
+            adapter.add(new ServerImpl(electionRepository, candidateRepository, voteRepository, 
+                       citizenRepository, votingTableRepository, votedCitizenRepository), 
+                       Util.stringToIdentity(identity));
+            System.out.println("ServerMain (" + instanceId + "): ServerImpl added to adapter.");
 
-            System.out.println("ServerMain: Activating adapter 'ServerAdapter'...");
+            System.out.println("ServerMain (" + instanceId + "): Activating adapter...");
             adapter.activate();
-            System.out.println("ServerMain: Adapter 'ServerAdapter' activated.");
-            System.out.println("ServerService ready and registered with adapter ServerAdapter.");
+            System.out.println("ServerMain (" + instanceId + "): Adapter activated.");
+            System.out.println("ServerService (" + instanceId + ") ready and registered.");
             
             communicator.waitForShutdown();
         } catch (Throwable t) {
             System.err.println("ServerMain: CRITICAL ERROR during startup or execution: " + t.getMessage());
+            t.printStackTrace();
         } finally {
             if (communicator != null) {
-                 JPAUtil.shutdown(); 
+                JPAUtil.shutdown(); 
             }
         }
     }

@@ -1,7 +1,7 @@
 <icegrid>
     <application name="ElectionSystemApp">
         <node name="Node1">
-            <!-- Servidor Principal -->
+            <!-- Servidor Principal - Réplica 1 -->
             <server id="ServerServiceInstance1"
                     exe="java"
                     activation="on-demand" 
@@ -11,9 +11,27 @@
                 <option>-cp</option>
                 <option>..\Sistema-de-Votaciones\server\build\libs\server.jar</option>
                 <option>ServerMain</option>
-                <property name="Ice.Config" value="..\Sistema-de-Votaciones\server\src\main\resources\config.server.cfg"/>
-                <adapter name="ServerAdapter" id="ServerAdapterID">
-                    <object identity="ServerService" type="::ElectionSystem::ServerService"/>
+                <option>--Ice.Config=..\Sistema-de-Votaciones\server\src\main\resources\config.server1.cfg</option>
+                <property name="Ice.Config" value="..\Sistema-de-Votaciones\server\src\main\resources\config.server1.cfg"/>
+                <adapter name="ServerAdapter" id="ServerAdapter1ID" replica-group="ServerServiceReplicas">
+                    <object identity="ServerService1" type="::ElectionSystem::ServerService"/>
+                </adapter>
+            </server>
+
+            <!-- Servidor Principal - Réplica 2 -->
+            <server id="ServerServiceInstance2"
+                    exe="java"
+                    activation="on-demand" 
+                    application-distrib="false"> 
+                <option>-Xms6144m</option>
+                <option>-Xmx6144m</option>
+                <option>-cp</option>
+                <option>..\Sistema-de-Votaciones\server\build\libs\server.jar</option>
+                <option>ServerMain</option>
+                <option>--Ice.Config=..\Sistema-de-Votaciones\server\src\main\resources\config.server2.cfg</option>
+                <property name="Ice.Config" value="..\Sistema-de-Votaciones\server\src\main\resources\config.server2.cfg"/>
+                <adapter name="ServerAdapter" id="ServerAdapter2ID" replica-group="ServerServiceReplicas">
+                    <object identity="ServerService2" type="::ElectionSystem::ServerService"/>
                 </adapter>
             </server>
 
@@ -31,7 +49,12 @@
                     <object identity="ControlCenterService" type="::ElectionSystem::ControlCenterService"/>
                 </adapter>
             </server>
-
         </node>
+
+        <!-- Configurar el balanceador de carga -->
+        <replica-group id="ServerServiceReplicas">
+            <load-balancing type="round-robin"/>
+            <object identity="ServerServiceLoadBalancer" type="::ElectionSystem::ServerService"/>
+        </replica-group>
     </application>
 </icegrid>

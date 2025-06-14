@@ -10,7 +10,7 @@ public class ProxyCacheServerMain {
         
         try (Communicator communicator = Util.initialize(args, "config.proxy.cfg")) {
             // Conectar al servidor principal usando IceGrid
-            ObjectPrx serverBase = communicator.stringToProxy("ServerService");
+            ObjectPrx serverBase = communicator.stringToProxy("ServerServiceLoadBalancer");
             ServerServicePrx serverProxy = ServerServicePrx.checkedCast(serverBase);
 
             ObjectAdapter adapter = communicator.createObjectAdapter("ProxyCacheAdapter");            

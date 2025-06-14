@@ -48,3 +48,5 @@ gradle-app.setting
 **/bin/
 
 ice-grid/
+
+.vscode/

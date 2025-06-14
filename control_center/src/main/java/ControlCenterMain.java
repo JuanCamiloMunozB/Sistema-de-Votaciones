@@ -14,7 +14,7 @@ public class ControlCenterMain {
             Scanner scanner = new Scanner(System.in)) { 
             
             ServerServicePrx serverService = ServerServicePrx.checkedCast(
-                communicator.stringToProxy("ServerService"));
+                communicator.stringToProxy("ServerServiceLoadBalancer"));
 
             if (serverService == null) {
                 System.err.println("Error: Could not get a proxy for ServerService from IceGrid. Check locator configuration and if ServerService is running and registered.");
