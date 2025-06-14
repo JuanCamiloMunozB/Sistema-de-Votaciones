@@ -13,23 +13,16 @@ public class ProxyCacheService implements ServerQueryService {
 
     private final ConcurrentHashMap<String, String> cache;
     private final ConcurrentHashMap<String, Long> cacheTimestamps;
-    private final ThreadPoolExecutor cacheExecutor;
     
     public ProxyCacheService(ServerServicePrx serverProxy, Communicator communicator) {
         this.serverProxy = serverProxy;
         
         Properties props = communicator.getProperties();
-        this.cacheExpiryTime = props.getPropertyAsIntWithDefault("ProxyCache.CacheExpiryMinutes", 15) * 60 * 1000;
-        this.maxCacheSize = props.getPropertyAsIntWithDefault("ProxyCache.MaxCacheSize", 10000);
+        this.cacheExpiryTime = props.getPropertyAsIntWithDefault("ProxyCache.CacheExpiryMinutes", 30) * 60 * 1000;
+        this.maxCacheSize = props.getPropertyAsIntWithDefault("ProxyCache.MaxCacheSize", 50000);
         
-        this.cache = new ConcurrentHashMap<>();
-        this.cacheTimestamps = new ConcurrentHashMap<>();
-        
-        this.cacheExecutor = new ThreadPoolExecutor(
-            10, 20, 30L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(500),
-            new ThreadPoolExecutor.CallerRunsPolicy()
-        );
+        this.cache = new ConcurrentHashMap<>(maxCacheSize);
+        this.cacheTimestamps = new ConcurrentHashMap<>(maxCacheSize);
         
         startCacheCleanup();
     }
@@ -40,21 +33,21 @@ public class ProxyCacheService implements ServerQueryService {
             return null;
         }
         
-        // Cache check
         String cachedResult = getCachedResult(document);
         if (cachedResult != null) {
             return cachedResult;
         }
         
-        // Query server
         try {
             String result = serverProxy.findVotingStationByDocument(document);
             
-            if (result != null) {
-                cacheResultAsync(document, result);
-            } else {
-                cacheResultAsync(document, "NULL_RESULT");
-            }
+            CompletableFuture.runAsync(() -> {
+                if (result != null) {
+                    cacheResult(document, result);
+                } else {
+                    cacheResult(document, "NULL_RESULT");
+                }
+            });
             
             return result;
             
@@ -65,12 +58,10 @@ public class ProxyCacheService implements ServerQueryService {
     }
     
     private String getCachedResult(String document) {
-        // Check cache size limit
-        if (cache.size() > maxCacheSize) {
-            cacheExecutor.submit(this::cleanOldestEntries);
+        if (cache.size() > maxCacheSize * 0.9) {
+            CompletableFuture.runAsync(this::cleanOldestEntries);
         }
         
-        // Check if the document is in cache and not expired
         Long timestamp = cacheTimestamps.get(document);
         if (timestamp != null && (System.currentTimeMillis() - timestamp) < cacheExpiryTime) {
             String cachedValue = cache.get(document);
@@ -78,8 +69,8 @@ public class ProxyCacheService implements ServerQueryService {
                 return null;
             }
             return cachedValue;
-        } else if (timestamp != null) { // If expired, remove from cache
-            cacheExecutor.submit(() -> {
+        } else if (timestamp != null) {
+            CompletableFuture.runAsync(() -> {
                 cache.remove(document);
                 cacheTimestamps.remove(document);
             });
@@ -87,16 +78,13 @@ public class ProxyCacheService implements ServerQueryService {
         return null;
     }
     
-    private void cacheResultAsync(String document, String result) {
-        cacheExecutor.submit(() -> {
-            cache.put(document, result);
-            cacheTimestamps.put(document, System.currentTimeMillis());
-        });
+    private void cacheResult(String document, String result) {
+        cache.put(document, result);
+        cacheTimestamps.put(document, System.currentTimeMillis());
     }
     
     private void cleanOldestEntries() {
-        // Remove oldest 10% of entries when cache is full
-        int toRemove = maxCacheSize / 10;
+        int toRemove = maxCacheSize / 5;
         cacheTimestamps.entrySet().stream()
             .sorted(java.util.Map.Entry.comparingByValue())
             .limit(toRemove)
@@ -111,25 +99,16 @@ public class ProxyCacheService implements ServerQueryService {
         cleanupExecutor.scheduleAtFixedRate(() -> {
             long currentTime = System.currentTimeMillis();
             
-            for (String key : cacheTimestamps.keySet()) {
-                Long timestamp = cacheTimestamps.get(key);
-                if (timestamp != null && (currentTime - timestamp) > cacheExpiryTime) {
-                    cache.remove(key);
-                    cacheTimestamps.remove(key);
-                }
-            }
-        }, 5, 5, TimeUnit.MINUTES);
+            cacheTimestamps.entrySet().removeIf(entry -> 
+                (currentTime - entry.getValue()) > cacheExpiryTime
+            );
+            
+            cache.keySet().retainAll(cacheTimestamps.keySet());
+            
+        }, 10, 10, TimeUnit.MINUTES);
     }
     
     public void shutdown() {
-        cacheExecutor.shutdown();
-        try {
-            if (!cacheExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                cacheExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            cacheExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
+        System.out.println("ProxyCacheService shutdown completed");
     }
 }

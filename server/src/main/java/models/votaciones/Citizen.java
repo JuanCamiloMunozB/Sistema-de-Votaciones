@@ -5,7 +5,9 @@ import lombok.Data;
 
 @Entity
 @Table(name = "ciudadano", indexes = {
-    @Index(name = "idx_citizen_document", columnList = "documento")
+    @Index(name = "idx_citizen_document", columnList = "documento", unique = true),
+    @Index(name = "idx_citizen_mesa_id", columnList = "mesa_id"),
+    @Index(name = "idx_citizen_document_mesa", columnList = "documento, mesa_id")
 })
 @Data
 public class Citizen {
@@ -14,7 +16,7 @@ public class Citizen {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "documento")
+    @Column(name = "documento", nullable = false, unique = true)
     private String document;
 
     @Column(name = "nombre")
@@ -23,7 +25,7 @@ public class Citizen {
     @Column(name = "apellido")
     private String lastName;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "mesa_id")
     private VotingTable votingTable;
 

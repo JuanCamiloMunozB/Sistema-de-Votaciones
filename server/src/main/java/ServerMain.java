@@ -15,19 +15,30 @@ public class ServerMain {
         try {
             communicator = Util.initialize(args);
             
-            // Obtener el ID de la instancia del servidor desde las propiedades
+            // Configure Ice for high concurrency
             Properties props = communicator.getProperties();
+            
+            // Enable multi-threading in Ice
+            props.setProperty("Ice.ThreadPool.Server.Size", "50");
+            props.setProperty("Ice.ThreadPool.Server.SizeMax", "200");
+            props.setProperty("Ice.ThreadPool.Server.SizeWarn", "150");
+            
+            // Optimize connection settings
+            props.setProperty("Ice.ACM.Timeout", "30");
+            props.setProperty("Ice.MessageSizeMax", "65536");
+            props.setProperty("Ice.Trace.Network", "0");
+            props.setProperty("Ice.Trace.Protocol", "0");
+            
             String instanceId = props.getProperty("Server.Instance.Id");
             
             if (instanceId == null || instanceId.isEmpty()) {
                 throw new RuntimeException("Server.Instance.Id property not found in configuration");
             }
             
-            System.out.println("ServerMain (" + instanceId + "): Initializing JPAUtil...");
+            System.out.println("ServerMain (" + instanceId + "): Initializing JPAUtil with connection pooling...");
             JPAUtil.initialize(communicator);
             System.out.println("ServerMain (" + instanceId + "): JPAUtil initialized.");
 
-            // Determinar el nombre del adaptador basado en la instancia
             String adapterName = "ServerAdapter1";
             if ("ServerInstance2".equals(instanceId)) {
                 adapterName = "ServerAdapter2";
@@ -35,50 +46,21 @@ public class ServerMain {
             
             System.out.println("ServerMain (" + instanceId + "): Creating ObjectAdapter '" + adapterName + "'...");
             ObjectAdapter adapter = communicator.createObjectAdapter(adapterName);
-            System.out.println("ServerMain (" + instanceId + "): ObjectAdapter created.");
             
-            // Log adapter information
-            System.out.println("ServerMain (" + instanceId + "): Adapter endpoints: " + adapter.getEndpoints().length + " endpoints");
-            for (int i = 0; i < adapter.getEndpoints().length; i++) {
-                System.out.println("  Endpoint " + i + ": " + adapter.getEndpoints()[i].toString());
-            }
-
-            // Crear repositorios
-            ElectionRepository electionRepository = new ElectionRepository();
-            CandidateRepository candidateRepository = new CandidateRepository();
-            VoteRepository voteRepository = new VoteRepository();
-            CitizenRepository citizenRepository = new CitizenRepository();
-            VotingTableRepository votingTableRepository = new VotingTableRepository();
-            VotedCitizenRepository votedCitizenRepository = new VotedCitizenRepository();
-
-            // Use the common identity for both servers
-            String identity = "ServerService";
-            
-            System.out.println("ServerMain (" + instanceId + "): Adding ServerImpl to adapter with identity '" + identity + "'...");
-            adapter.add(new ServerImpl(electionRepository, candidateRepository, voteRepository, 
-                       citizenRepository, votingTableRepository, votedCitizenRepository), 
-                       Util.stringToIdentity(identity));
-            System.out.println("ServerMain (" + instanceId + "): ServerImpl added to adapter.");
+            // Configure adapter for high throughput
+            adapter.add(new ServerImpl(new ElectionRepository(), new CandidateRepository(), 
+                       new VoteRepository(), new CitizenRepository(), new VotingTableRepository(), 
+                       new VotedCitizenRepository()), Util.stringToIdentity("ServerService"));
 
             System.out.println("ServerMain (" + instanceId + "): Activating adapter...");
             adapter.activate();
-            System.out.println("ServerMain (" + instanceId + "): Adapter activated.");
             
-            // Log final adapter state
-            System.out.println("ServerMain (" + instanceId + "): Final adapter endpoints: " + adapter.getEndpoints().length + " endpoints");
-            for (int i = 0; i < adapter.getEndpoints().length; i++) {
-                System.out.println("  Final Endpoint " + i + ": " + adapter.getEndpoints()[i].toString());
-            }
-            
-            System.out.println("ServerMain (" + instanceId + "): Server activation completed successfully.");
-            System.out.println("ServerService (" + instanceId + ") ready and registered.");
-            
-            // Add a small delay to ensure everything is properly initialized
-            Thread.sleep(2000); // Increased delay
+            System.out.println("ServerService (" + instanceId + ") ready with " + 
+                             props.getProperty("Ice.ThreadPool.Server.Size") + " threads.");
             
             communicator.waitForShutdown();
         } catch (Throwable t) {
-            System.err.println("ServerMain: CRITICAL ERROR during startup or execution: " + t.getMessage());
+            System.err.println("ServerMain: CRITICAL ERROR: " + t.getMessage());
             t.printStackTrace();
             System.exit(1);
         } finally {

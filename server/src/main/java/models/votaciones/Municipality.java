@@ -3,7 +3,9 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 @Entity
-@Table(name = "municipio")
+@Table(name = "municipio", indexes = {
+    @Index(name = "idx_municipality_departamento", columnList = "departamento_id")
+})
 @Data
 public class Municipality {
 
@@ -14,7 +16,7 @@ public class Municipality {
     @Column(name = "nombre")
     private String name;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "departamento_id")
     private Department department;
 

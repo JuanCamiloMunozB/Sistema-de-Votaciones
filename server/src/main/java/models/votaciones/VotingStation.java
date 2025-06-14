@@ -3,7 +3,10 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 @Entity
-@Table(name = "puesto_votacion")
+@Table(name = "puesto_votacion", indexes = {
+    @Index(name = "idx_voting_station_municipio", columnList = "municipio_id"),
+    @Index(name = "idx_voting_station_consecutive", columnList = "consecutive")
+})
 @Data
 public class VotingStation {
 
@@ -20,7 +23,7 @@ public class VotingStation {
     @Column(name = "direccion")
     private String address;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "municipio_id")
     private Municipality municipality;
 
