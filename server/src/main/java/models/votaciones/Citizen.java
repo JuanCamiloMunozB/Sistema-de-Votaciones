@@ -9,7 +9,7 @@ import org.hibernate.annotations.CacheConcurrencyStrategy;
 @Table(name = "ciudadano", indexes = {
     @Index(name = "idx_citizen_document", columnList = "documento", unique = true),
     @Index(name = "idx_citizen_mesa_id", columnList = "mesa_id"),
-    @Index(name = "idx_citizen_document_mesa", columnList = "documento, mesa_id")
+    @Index(name = "idx_citizen_document_mesa", columnList = "documento, mesa_id"),
 })
 @Cache(usage = CacheConcurrencyStrategy.READ_ONLY)
 @Data

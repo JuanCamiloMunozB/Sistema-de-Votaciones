@@ -35,8 +35,9 @@ public class JPAUtil {
             baseProperties.put("hibernate.show_sql", "false");
             baseProperties.put("hibernate.format_sql", "false");
             
-            baseProperties.put("hibernate.connection.pool_size", "50");
-            baseProperties.put("hibernate.jdbc.batch_size", "100");
+            // Aggressive connection pooling optimization to prevent saturation
+            baseProperties.put("hibernate.connection.pool_size", "10"); // Drastically reduced
+            baseProperties.put("hibernate.jdbc.batch_size", "50");
             baseProperties.put("hibernate.order_inserts", "true");
             baseProperties.put("hibernate.order_updates", "true");
             baseProperties.put("hibernate.jdbc.batch_versioned_data", "true");
@@ -44,26 +45,39 @@ public class JPAUtil {
             baseProperties.put("hibernate.cache.use_second_level_cache", "false");
             baseProperties.put("hibernate.cache.use_query_cache", "false");
             
-            baseProperties.put("hibernate.connection.provider_disables_autocommit", "true");
+            baseProperties.put("hibernate.connection.provider_disables_autocommit", "false"); // Enable autocommit for reads
             baseProperties.put("hibernate.jdbc.lob.non_contextual_creation", "true");
             
-            baseProperties.put("hibernate.c3p0.min_size", "10");
-            baseProperties.put("hibernate.c3p0.max_size", "50");
-            baseProperties.put("hibernate.c3p0.timeout", "1800");
-            baseProperties.put("hibernate.c3p0.max_statements", "150");
+            // Optimized C3P0 settings to prevent connection saturation
+            baseProperties.put("hibernate.c3p0.min_size", "5");  // Minimum connections
+            baseProperties.put("hibernate.c3p0.max_size", "15"); // Maximum connections - much lower
+            baseProperties.put("hibernate.c3p0.timeout", "60");  // Shorter timeout
+            baseProperties.put("hibernate.c3p0.max_statements", "200");
+            baseProperties.put("hibernate.c3p0.idle_test_period", "10");
+            baseProperties.put("hibernate.c3p0.acquire_increment", "1"); // Only get 1 connection at a time
+            baseProperties.put("hibernate.c3p0.max_statements_per_connection", "20");
+            baseProperties.put("hibernate.c3p0.checkout_timeout", "1000"); // 1 second timeout
             
-            baseProperties.put("hibernate.jdbc.use_get_generated_keys", "true");
-            baseProperties.put("hibernate.jdbc.use_streams_for_binary", "true");
-            baseProperties.put("hibernate.jdbc.use_scrollable_resultset", "true");
+            // PostgreSQL-specific optimizations for read queries
+            baseProperties.put("hibernate.jdbc.use_get_generated_keys", "false");
+            baseProperties.put("hibernate.jdbc.use_streams_for_binary", "false");
+            baseProperties.put("hibernate.jdbc.use_scrollable_resultset", "false");
+            baseProperties.put("hibernate.jdbc.fetch_size", "1"); // Minimal fetch size
 
             Properties config = communicator.getProperties();
 
-            // EntityManagerFactory for votaciones
+            // EntityManagerFactory for votaciones with aggressive read optimization
             Map<String, String> votingProps = new HashMap<>(baseProperties);
             votingProps.put("hibernate.hbm2ddl.auto", "validate");
             votingProps.put("jakarta.persistence.jdbc.user", config.getProperty("database.votaciones.user"));
             votingProps.put("jakarta.persistence.jdbc.password", config.getProperty("database.votaciones.password"));
             votingProps.put("jakarta.persistence.jdbc.url", config.getProperty("database.votaciones.url"));
+            
+            // Read-only optimization settings
+            votingProps.put("hibernate.connection.isolation", "1"); // READ_UNCOMMITTED for maximum speed
+            votingProps.put("hibernate.default_read_only", "true");
+            votingProps.put("hibernate.connection.autocommit", "true");
+            
             emfVoting = Persistence.createEntityManagerFactory("VotingPU", votingProps);
 
             // EntityManagerFactory for Application DB (votos, candidatos, elecciones, etc)
@@ -74,7 +88,7 @@ public class JPAUtil {
             electionProps.put("jakarta.persistence.jdbc.url", config.getProperty("database.elections.url"));
             emfElections = Persistence.createEntityManagerFactory("ElectionPU", electionProps);
 
-            System.out.println("EntityManagerFactories initialized successfully with high-volume optimizations (cache disabled)");
+            System.out.println("EntityManagerFactories initialized with connection-optimized settings");
 
         } catch (Exception e) {
             System.err.println("Error initializing JPA: " + e.getMessage());
@@ -88,6 +102,17 @@ public class JPAUtil {
             throw new IllegalStateException("JPAUtil has not been initialized. Call initialize() first.");
         }
         return emfVoting.createEntityManager();
+    }
+
+    public static EntityManager getEntityManagerVotingReadOnly() {
+        if (emfVoting == null) {
+            throw new IllegalStateException("JPAUtil has not been initialized. Call initialize() first.");
+        }
+        EntityManager em = emfVoting.createEntityManager();
+        
+        em.setProperty("org.hibernate.readOnly", true);
+        em.setProperty("org.hibernate.flushMode", "MANUAL");
+        return em;
     }
 
     public static EntityManager getEntityManagerElections() {
@@ -137,6 +162,24 @@ public class JPAUtil {
         }
     }
 
+    public static <T> T executeReadOnlyQuery(QueryCallback<T> callback) {
+        EntityManager em = null;
+        try {
+            em = getEntityManagerVoting();
+            em.setProperty("org.hibernate.readOnly", true);
+            em.setProperty("org.hibernate.flushMode", "MANUAL");
+            
+            return callback.execute(em);
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Error in read-only query: " + e.getMessage(), e);
+        } finally {
+            if (em != null && em.isOpen()) {
+                em.close();
+            }
+        }
+    }
+
     // Interfaces for transaction callbacks
     @FunctionalInterface
     public interface TransactionCallback<T> {
@@ -146,5 +189,11 @@ public class JPAUtil {
     @FunctionalInterface
     public interface TransactionCallbackVoid {
         void execute(EntityManager em) throws Exception;
+    }
+
+    // Interface for read-only callbacks
+    @FunctionalInterface
+    public interface QueryCallback<T> {
+        T execute(EntityManager em) throws Exception;
     }
 }

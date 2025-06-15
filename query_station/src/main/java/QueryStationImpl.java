@@ -7,6 +7,7 @@ public class QueryStationImpl implements queryStation {
     
     public QueryStationImpl(ServerQueryServicePrx proxyCacheService) {
         this.proxyCacheService = proxyCacheService;
+        System.out.println("QueryStationImpl initialized with proxy cache service");
     }
     
     @Override
@@ -18,7 +19,6 @@ public class QueryStationImpl implements queryStation {
         try {
             return proxyCacheService.findVotingStationByDocument(document);
         } catch (Exception e) {
-            System.err.println("QueryStationImpl: Error querying proxy cache for document " + document + ": " + e.getMessage());
             return null;
         }
     }

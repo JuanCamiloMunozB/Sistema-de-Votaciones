@@ -1,7 +1,6 @@
 import ElectionSystem.*;
 import models.elections.*;
 import models.votaciones.Citizen;
-import models.votaciones.VotingStation;
 import models.votaciones.VotingTable;
 import repositories.elections.*;
 import repositories.votaciones.*;
@@ -46,7 +45,7 @@ public class ServerImpl implements ServerService {
     private final Map<String, EventObserverPrx> subscribers = new ConcurrentHashMap<>();
     
     private final BlockingQueue<EntityManager> votingEMPool = new LinkedBlockingQueue<>();
-    private static final int VOTING_EM_POOL_SIZE = 20;
+    private static final int VOTING_EM_POOL_SIZE = 5;
     
     private final ExecutorService voteProcessingExecutor;
     private final BlockingQueue<VoteProcessingTask> voteQueue;
@@ -115,14 +114,85 @@ public class ServerImpl implements ServerService {
         System.out.println("ServerImpl initialized with async vote processing system");
     }
 
-    private void initElectionBasicData() {
-        if (this.currentElection != null) {
-            return;
+    private final Map<String, String> votingStationCache = new ConcurrentHashMap<>();
+    private static final int MAX_CACHE_SIZE = 100000;
+    private final AtomicLong cacheHits = new AtomicLong(0);
+    private final AtomicLong cacheMisses = new AtomicLong(0);
+    
+    @Override
+    public String findVotingStationByDocument(String document, Current current) {
+        if (document == null || document.trim().isEmpty()) {
+            return "";
         }
-        this.currentElection = electionRepository.findCurrentElection()
-            .orElseThrow(() -> new RuntimeException("No current election found"));
-        this.candidates = candidateRepository.findCandidatesByElectionId(this.currentElection.getId());
-        this.votingTablesByStation = votingTableRepository.groupVotingTablesByStation();
+        
+        document = document.trim();
+        
+        String cachedResult = votingStationCache.get(document);
+        if (cachedResult != null) {
+            cacheHits.incrementAndGet();
+            return "NULL_RESULT".equals(cachedResult) ? "" : cachedResult;
+        }
+        
+        cacheMisses.incrementAndGet();
+        
+        return queryVotingStationDirect(document);
+    }
+    
+    private String queryVotingStationDirect(String document) {
+        try {
+            Integer tableId = citizenRepository.findVotingTableIdByDocument(document);
+            
+            String result;
+            if (tableId != null) {
+                result = "Usted debe votar en la mesa " + tableId + ".";
+            } else {
+                result = "";
+            }
+
+            if (votingStationCache.size() < MAX_CACHE_SIZE) {
+                votingStationCache.put(document, result.isEmpty() ? "NULL_RESULT" : result);
+            }
+            
+            return result;
+            
+        } catch (Exception e) {
+            System.err.println("Error in optimized query for document " + document + ": " + e.getMessage());
+            return "";
+        }
+    }
+
+    public void initElectionBasicData() {
+        System.out.println("Loading election basic data...");
+
+        try {
+            Optional<List<Candidate>> candidatesOpt = candidateRepository.findAll();
+            this.candidates = candidatesOpt.orElse(new ArrayList<>());
+            
+            Optional<Election> electionOpt = electionRepository.findById(1);
+            this.currentElection = electionOpt.orElse(null);
+            
+            this.votingTablesByStation = new HashMap<>();
+            try {
+                Map<Integer, List<VotingTable>> votingTablesMap = votingTableRepository.groupVotingTablesByStation();
+                if (votingTablesMap != null) {
+                    this.votingTablesByStation = votingTablesMap;
+                }
+            } catch (Exception e) {
+                System.err.println("Error loading voting tables by station: " + e.getMessage());
+                this.votingTablesByStation = new HashMap<>();
+            }
+            
+            System.out.println("Election basic data loaded successfully");
+            System.out.println("- Candidates: " + candidates.size());
+            System.out.println("- Election: " + (currentElection != null ? currentElection.getName() : "None"));
+            System.out.println("- Voting stations: " + votingTablesByStation.size());
+            
+            System.out.println("Direct query cache system initialized (no pre-loading)");
+            
+        } catch (Exception e) {
+            System.err.println("Error loading election basic data: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -149,11 +219,12 @@ public class ServerImpl implements ServerService {
 
     @Override
     public VotingTableData[] getVotingTablesFromStation(int controlCenterId, Current current) {
-        if (currentElection == null) {
+        if (currentElection == null || votingTablesByStation == null) {
             initElectionBasicData();
         }
         
-        List<VotingTable> votingTablesForStation = votingTablesByStation.get(controlCenterId);
+        List<VotingTable> votingTablesForStation = votingTablesByStation != null ? 
+            votingTablesByStation.get(controlCenterId) : null;
         if (votingTablesForStation == null || votingTablesForStation.isEmpty()) {
             return new VotingTableData[0];
         }
@@ -181,11 +252,11 @@ public class ServerImpl implements ServerService {
     public void registerVote(VoteData vote, Current current)
         throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable {
         
-        if (this.candidates == null || this.votingTablesByStation == null) {
+        if (this.candidates == null) {
             initElectionBasicData();
         }
         
-        boolean candidateExists = this.candidates.stream()
+        boolean candidateExists = this.candidates != null && this.candidates.stream()
             .anyMatch(c -> c.getId() == vote.candidateId);
         if (!candidateExists) {
             throw new CandidateNotFound("Candidate with ID " + vote.candidateId + " not found");
@@ -318,8 +389,18 @@ public class ServerImpl implements ServerService {
             task.resultFuture.complete(null);
             
         } catch (Exception e) {
-            System.err.println("Error processing vote for " + task.vote.citizenDocument + ": " + e.getMessage());
-            task.resultFuture.completeExceptionally(e);
+            String errorMessage = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+            boolean isConnectionPoolError = errorMessage.contains("connection pool") || 
+                                          errorMessage.contains("maximum size") ||
+                                          errorMessage.contains("no connection is currently available") ||
+                                          errorMessage.contains("pool has reached");
+            
+            if (isConnectionPoolError) {
+                task.resultFuture.completeExceptionally(e);
+            } else {
+                System.err.println("Error processing vote for " + task.vote.citizenDocument + ": " + e.getMessage());
+                task.resultFuture.completeExceptionally(e);
+            }
         } finally {
             if (votingEM != null) {
                 returnVotingEM(votingEM);
@@ -417,6 +498,14 @@ public class ServerImpl implements ServerService {
 
     @Override
     public CandidateData[] getCandidates(Current current) {
+        if (this.candidates == null) {
+            initElectionBasicData();
+        }
+        
+        if (this.candidates == null) {
+            return new CandidateData[0];
+        }
+        
         return this.candidates.stream()
             .map(this::convertCandidateToCandidateData)
             .toList().toArray(new CandidateData[0]);
@@ -432,34 +521,35 @@ public class ServerImpl implements ServerService {
     }
 
     @Override
-    public String findVotingStationByDocument(String document, Current current) {
-        try {
-            Optional<Citizen> citizenOpt = citizenRepository.findByDocument(document);
-            
-            if (citizenOpt.isPresent()) {
-                Citizen citizen = citizenOpt.get();
-                VotingStation station = citizen.getVotingTable().getVotingStation();
-                
-                return String.format(
-                    "Usted debe votar en %s ubicado en %s en %s, %s en la mesa %d.",
-                    station.getName(),
-                    station.getAddress(),
-                    station.getMunicipality().getName(),
-                    station.getMunicipality().getDepartment().getName(),
-                    citizen.getVotingTable().getId()
-                );
-            } else {
-                return null;
-            }
-            
-        } catch (Exception e) {
-            System.err.println("Error finding voting station for document " + document + ": " + e.getMessage());
-            return null;
-        }
+    public String getCacheStats(Current current) {
+        long hits = cacheHits.get();
+        long misses = cacheMisses.get();
+        long total = hits + misses;
+        double hitRate = total > 0 ? (double) hits / total * 100 : 0;
+        
+        return String.format("Cache: %d entries, %.1f%% hit rate (%d hits, %d misses)",
+                votingStationCache.size(), hitRate, hits, misses);
+    }
+    
+    // Method to clear cache when necessary
+    @Override
+    public void clearCache(Current current) {
+        votingStationCache.clear();
+        cacheHits.set(0);
+        cacheMisses.set(0);
+        System.out.println("Voting station cache cleared");
     }
 
     @Override
     public CandidateResult[] getGlobalResults(Current current) {
+        if (this.candidates == null) {
+            initElectionBasicData();
+        }
+        
+        if (this.candidates == null) {
+            return new CandidateResult[0];
+        }
+        
         Map<Integer, Long> votesByCandidate = candidates.stream().collect(Collectors.toMap(
             Candidate::getId,
             c -> voteRepository.countByCandidateId(c.getId())
@@ -475,22 +565,28 @@ public class ServerImpl implements ServerService {
 
     @Override
     public Map<Integer, CandidateResult[]> getResultsByVotingTable(Current current) {
-    Map<Integer, Map<Integer, Integer>> rawVotes = voteRepository.countVotesGroupedByTableAndCandidate();
-
-    Map<Integer, CandidateResult[]> tableResults = new HashMap<>();
-    for (Map.Entry<Integer, Map<Integer, Integer>> entry : rawVotes.entrySet()) {
-        int tableId = entry.getKey();
-        Map<Integer, Integer> candidateVotes = entry.getValue();
-
-        List<CandidateResult> results = new ArrayList<>();
-        for (Candidate c : candidates) {
-            int count = candidateVotes.getOrDefault(c.getId(), 0);
-            results.add(new CandidateResult(c.getId(), c.getFirstName() + " " + c.getLastName(), count));
+        if (this.candidates == null) {
+            initElectionBasicData();
         }
-        tableResults.put(tableId, results.toArray(new CandidateResult[0]));
-    }
+        
+        Map<Integer, Map<Integer, Integer>> rawVotes = voteRepository.countVotesGroupedByTableAndCandidate();
 
-    return tableResults;
+        Map<Integer, CandidateResult[]> tableResults = new HashMap<>();
+        if (this.candidates != null) {
+            for (Map.Entry<Integer, Map<Integer, Integer>> entry : rawVotes.entrySet()) {
+                int tableId = entry.getKey();
+                Map<Integer, Integer> candidateVotes = entry.getValue();
+
+                List<CandidateResult> results = new ArrayList<>();
+                for (Candidate c : candidates) {
+                    int count = candidateVotes.getOrDefault(c.getId(), 0);
+                    results.add(new CandidateResult(c.getId(), c.getFirstName() + " " + c.getLastName(), count));
+                }
+                tableResults.put(tableId, results.toArray(new CandidateResult[0]));
+            }
+        }
+
+        return tableResults;
     }
 
     @Override

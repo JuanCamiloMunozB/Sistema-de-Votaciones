@@ -160,4 +160,36 @@ public class CitizenRepository {
             }
         });
     }
+
+    public Integer findVotingTableIdByDocument(String document) {
+        return JPAUtil.executeReadOnlyQuery(em -> {
+            try {
+                jakarta.persistence.Query query = em.createNativeQuery(
+                    "SELECT mesa_id FROM ciudadano WHERE documento = ? LIMIT 1"
+                );
+                query.setParameter(1, document);
+                
+                query.setHint("org.hibernate.readOnly", true);
+                query.setHint("org.hibernate.cacheable", false);
+                query.setHint("org.hibernate.timeout", 50);
+                query.setHint("org.hibernate.fetchSize", 1);
+                
+                List<Object> results = query.getResultList();
+                
+                if (!results.isEmpty() && results.get(0) != null) {
+                    Object result = results.get(0);
+                    if (result instanceof Number) {
+                        return ((Number) result).intValue();
+                    } else if (result instanceof String) {
+                        return Integer.parseInt((String) result);
+                    }
+                }
+                return null;
+                
+            } catch (Exception e) {
+                System.err.println("Error in native query for document " + document + ": " + e.getMessage());
+                return null;
+            }
+        });
+    }
 }

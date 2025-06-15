@@ -102,6 +102,8 @@ module ElectionSystem {
         CitizenDataSeq getCitizensByTableId(int tableId);
         string getProcessingStats();
         void printQueueStatus();
+        string getCacheStats();
+        void clearCache();
     }
 
     interface ControlCenterService {

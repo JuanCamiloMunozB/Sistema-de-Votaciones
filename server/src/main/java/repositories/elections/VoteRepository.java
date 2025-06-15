@@ -62,23 +62,24 @@ public class VoteRepository extends GenericRepository<Vote, Integer> {
     }
 
     public Map<Integer, Map<Integer, Integer>> countVotesGroupedByTableAndCandidate() {
-    return JPAUtil.executeInTransaction(this.entityManager, em -> {
-        List<Object[]> results = em.createQuery(
-            "SELECT v.tableId, v.candidate.id, COUNT(v) FROM Vote v GROUP BY v.tableId, v.candidate.id"
-        ).getResultList();
+        return JPAUtil.executeInTransaction(this.entityManager, em -> {
+            List<Object[]> results = em.createQuery(
+                "SELECT v.tableId, v.candidate.id, COUNT(v) FROM Vote v GROUP BY v.tableId, v.candidate.id",
+                Object[].class
+            ).getResultList();
 
-        Map<Integer, Map<Integer, Integer>> tableToCandidateVotes = new HashMap<>();
-        for (Object[] row : results) {
-            int tableId = (int) row[0];
-            int candidateId = (int) row[1];
-            long count = (long) row[2];
+            Map<Integer, Map<Integer, Integer>> tableToCandidateVotes = new HashMap<>();
+            for (Object[] row : results) {
+                int tableId = (int) row[0];
+                int candidateId = (int) row[1];
+                long count = (long) row[2];
 
-            tableToCandidateVotes
-                .computeIfAbsent(tableId, k -> new HashMap<>())
-                .put(candidateId, (int) count);
-        }
-        return tableToCandidateVotes;
-    });
+                tableToCandidateVotes
+                    .computeIfAbsent(tableId, k -> new HashMap<>())
+                    .put(candidateId, (int) count);
+            }
+            return tableToCandidateVotes;
+        });
     }
 
 }
