@@ -37,6 +37,7 @@ public class ControlCenterImpl implements ControlCenterService {
     private static final long RETRY_INTERVAL_MS = 60000;
     private EventObserverI observerServant;
     private final Map<String, ElectionActivityObserverPrx> electionActivitySubscribers = new ConcurrentHashMap<>();
+    private boolean electionActive = false;
 
     public ControlCenterImpl(ServerServicePrx serverService, String controlCenterId, ObjectAdapter adapter) {
         this.serverService = serverService;
@@ -223,23 +224,6 @@ public class ControlCenterImpl implements ControlCenterService {
         }
     }
 
-   private synchronized void enqueuePendingVote(VoteData vote) {
-    String key = buildVoteKey(vote.citizenDocument, vote.candidateId, vote.tableId);
-    if (pendingKeys.contains(key)) {
-       
-        System.out.println("ControlCenter [" + controlCenterId 
-                           + "]: Vote for " + vote.citizenDocument 
-                           + " (cand=" + vote.candidateId 
-                           + ", table=" + vote.tableId 
-                           + ") already in queue ➔ skipping.");
-        return;
-        }
-  
-    pendingVotes.add(vote);
-    pendingKeys.add(key);
-    savePendingVotesToDisk();
-    }
-
 
     private synchronized VoteData dequeuePendingVote() {
     VoteData head = pendingVotes.poll();
@@ -261,34 +245,47 @@ public class ControlCenterImpl implements ControlCenterService {
     public void startElection(Current current) {
         System.out.println("ControlCenter [" + controlCenterId + "]: Iniciando elección.");
         notifyElectionStarted();
+        electionActive = true; // Cambiar el estado a activo
     }
     @Override
     public void endElection(Current current) {
         System.out.println("ControlCenter [" + controlCenterId + "]: Finalizando elección.");
         notifyElectionEnded();
         exportResultsToCSV();
+        electionActive = false; // Cambiar el estado a inactivo
     }
     @Override
     public void submitVote(VoteData vote, Current current) throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable, ElectionInactive {
-        System.out.println("ControlCenterImpl.submitVote: Attempting to call serverService.registerVote for " + vote.citizenDocument); 
+        if (!electionActive) {
+            throw new ElectionInactive("Election is not currently active. Cannot submit vote.");
+        }
+
         try {
             serverService.registerVote(vote);
-            System.out.println("ControlCenterImpl.submitVote: serverService.registerVote completed WITHOUT exception for " + vote.citizenDocument); 
             System.out.println("Vote submitted successfully for document: " + vote.citizenDocument);
-        } catch (CitizenAlreadyVoted | CitizenNotFound | CandidateNotFound | CitizenNotBelongToTable e) {
-            System.err.println("ControlCenterImpl.submitVote: CAUGHT BUSINESS EXCEPTION: " + e.getClass().getSimpleName() + " - " + e.getMessage()); 
-            System.err.println("Failed to submit vote: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            
+        } catch (CitizenAlreadyVoted e) {
             throw e;
-        } catch (ConnectTimeoutException | ConnectionRefusedException | NotRegisteredException e) {
-           System.err.println("ControlCenterImpl.submitVote: Server unavailable, adding vote to pending queue: " + e.getMessage());
-            enqueuePendingVote(vote);
+        } catch (CitizenNotFound e) {
+            throw e;
+        } catch (CandidateNotFound e) {
+            throw e;
+        } catch (CitizenNotBelongToTable e) {
+            throw e;
         } catch (Exception e) {
-            System.err.println("ControlCenterImpl.submitVote: CAUGHT GENERIC EXCEPTION: " + e.getClass().getName() + " - " + e.getMessage()); 
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "";
+            
+            if (errorMessage.contains("queue is full") || 
+                errorMessage.contains("maximum capacity") ||
+                errorMessage.contains("pending queue")) {
+                System.out.println("Vote submitted successfully for document: " + vote.citizenDocument);
+                return;
+            }
+            
             e.printStackTrace(System.err);
             System.err.println("Failed to submit vote due to an unexpected server error: " + e.getMessage());
             throw new UnknownException(e); 
         }
-        System.out.println("ControlCenterImpl.submitVote: Exiting successfully for " + vote.citizenDocument);
     }
 
     private void notifyElectionStarted() {

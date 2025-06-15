@@ -100,6 +100,8 @@ module ElectionSystem {
         CandidateResultSeq getGlobalResults();
         TableResultsMap getResultsByVotingTable();
         CitizenDataSeq getCitizensByTableId(int tableId);
+        string getProcessingStats();
+        void printQueueStatus();
     }
 
     interface ControlCenterService {

@@ -15,19 +15,24 @@ public class ServerMain {
         try {
             communicator = Util.initialize(args);
             
-            // Configure Ice for high concurrency
+            // Configure Ice for high concurrency - optimized for high volume
             Properties props = communicator.getProperties();
             
-            // Enable multi-threading in Ice
-            props.setProperty("Ice.ThreadPool.Server.Size", "50");
-            props.setProperty("Ice.ThreadPool.Server.SizeMax", "200");
-            props.setProperty("Ice.ThreadPool.Server.SizeWarn", "150");
+            // Enhanced multi-threading in Ice for high volume
+            props.setProperty("Ice.ThreadPool.Server.Size", "100");
+            props.setProperty("Ice.ThreadPool.Server.SizeMax", "300");
+            props.setProperty("Ice.ThreadPool.Server.SizeWarn", "250");
             
-            // Optimize connection settings
-            props.setProperty("Ice.ACM.Timeout", "30");
-            props.setProperty("Ice.MessageSizeMax", "65536");
+            // Optimize connection settings for high throughput
+            props.setProperty("Ice.ACM.Timeout", "60");
+            props.setProperty("Ice.MessageSizeMax", "131072");
             props.setProperty("Ice.Trace.Network", "0");
             props.setProperty("Ice.Trace.Protocol", "0");
+            
+            // Additional optimizations for high volume
+            props.setProperty("Ice.ThreadPool.Client.Size", "50");
+            props.setProperty("Ice.ThreadPool.Client.SizeMax", "100");
+            props.setProperty("Ice.Connection.ConnectTimeout", "10000");
             
             String instanceId = props.getProperty("Server.Instance.Id");
             
@@ -56,7 +61,7 @@ public class ServerMain {
             adapter.activate();
             
             System.out.println("ServerService (" + instanceId + ") ready with " + 
-                             props.getProperty("Ice.ThreadPool.Server.Size") + " threads.");
+                             props.getProperty("Ice.ThreadPool.Server.Size") + " threads (optimized for high volume).");
             
             communicator.waitForShutdown();
         } catch (Throwable t) {

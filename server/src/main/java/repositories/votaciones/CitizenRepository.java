@@ -15,9 +15,61 @@ import java.util.stream.Collectors;
 
 public class CitizenRepository {
     
+    private static final Map<String, CitizenValidationData> validationCache = new ConcurrentHashMap<>();
+    private static final long VALIDATION_CACHE_TTL = 60000;
     private static final Map<String, Citizen> documentCache = new ConcurrentHashMap<>();
     private static final long CACHE_TTL = 300000;
     private static volatile long lastCacheUpdate = 0;
+
+    public static class CitizenValidationData {
+        public final Integer citizenId;
+        public final Integer tableId;
+        public final long cacheTime;
+        
+        public CitizenValidationData(Integer citizenId, Integer tableId) {
+            this.citizenId = citizenId;
+            this.tableId = tableId;
+            this.cacheTime = System.currentTimeMillis();
+        }
+        
+        public boolean isValid() {
+            return System.currentTimeMillis() - cacheTime < VALIDATION_CACHE_TTL;
+        }
+    }
+    
+    public CitizenValidationData getCitizenValidationData(String document) {
+        CitizenValidationData cached = validationCache.get(document);
+        if (cached != null && cached.isValid()) {
+            return cached;
+        }
+        
+        EntityManager entityManager = JPAUtil.getEntityManagerVoting();
+        return JPAUtil.executeInTransaction(entityManager, em -> {
+            try {
+                TypedQuery<Object[]> query = em.createQuery(
+                    "SELECT c.id, c.votingTable.id FROM Citizen c WHERE c.document = :document", 
+                    Object[].class
+                );
+                query.setParameter("document", document);
+                query.setHint("org.hibernate.readOnly", true);
+                query.setHint("org.hibernate.cacheable", true);
+                
+                Object[] result = query.getSingleResult();
+                CitizenValidationData data = new CitizenValidationData(
+                    (Integer) result[0], 
+                    (Integer) result[1]
+                );
+                
+                if (validationCache.size() < 10000) {
+                    validationCache.put(document, data);
+                }
+                
+                return data;
+            } catch (NoResultException e) {
+                return null;
+            }
+        });
+    }
 
     public Optional<Citizen> findByDocument(String document) {
         Citizen cachedCitizen = getCachedCitizen(document);

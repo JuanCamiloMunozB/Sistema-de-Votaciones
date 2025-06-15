@@ -5,6 +5,7 @@ import models.votaciones.VotingStation;
 import models.votaciones.VotingTable;
 import repositories.elections.*;
 import repositories.votaciones.*;
+import utils.JPAUtil;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -16,11 +17,18 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import com.zeroc.Ice.Current;
-import com.zeroc.Ice.TimeoutException;
-import com.zeroc.Ice.ConnectFailedException;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.TypedQuery;
 
 public class ServerImpl implements ServerService {
     
@@ -29,7 +37,6 @@ public class ServerImpl implements ServerService {
     private final VoteRepository voteRepository;
     private final CitizenRepository citizenRepository;
     private final VotingTableRepository votingTableRepository;
-    private final VotedCitizenRepository votedCitizenRepository;
 
     private Election currentElection;
     List<Candidate> candidates;
@@ -37,7 +44,35 @@ public class ServerImpl implements ServerService {
     private final Map<VotingTable, List<Citizen>> citizensByTableCache;
     
     private final Map<String, EventObserverPrx> subscribers = new ConcurrentHashMap<>();
-    private static final int NOTIFICATION_TIMEOUT_SECONDS = 2;
+    
+    private final BlockingQueue<EntityManager> votingEMPool = new LinkedBlockingQueue<>();
+    private static final int VOTING_EM_POOL_SIZE = 20;
+    
+    private final ExecutorService voteProcessingExecutor;
+    private final BlockingQueue<VoteProcessingTask> voteQueue;
+    private final BlockingQueue<VoteProcessingTask> pendingQueue;
+    private final ExecutorService pendingQueueProcessors;
+    private final AtomicLong processedVotes = new AtomicLong(0);
+    private final AtomicLong pendingVotes = new AtomicLong(0);
+    private final AtomicBoolean isPendingQueueActive = new AtomicBoolean(true);
+    
+    private static final int VOTE_PROCESSING_THREADS = 40;
+    private static final int PENDING_QUEUE_PROCESSORS = 10;
+    private static final int VOTE_QUEUE_CAPACITY = 50000;
+    private static final int PENDING_QUEUE_CAPACITY = 100000;
+    private static final long PENDING_RETRY_INTERVAL_MS = 50;
+    
+    private static class VoteProcessingTask {
+        final VoteData vote;
+        final CompletableFuture<Void> resultFuture;
+        final long submitTime;
+        
+        VoteProcessingTask(VoteData vote) {
+            this.vote = vote;
+            this.resultFuture = new CompletableFuture<>();
+            this.submitTime = System.currentTimeMillis();
+        }
+    }
     
     public ServerImpl(ElectionRepository electionRepository, 
                       CandidateRepository candidateRepository, 
@@ -50,7 +85,6 @@ public class ServerImpl implements ServerService {
         this.voteRepository = voteRepository;
         this.citizenRepository = citizenRepository;
         this.votingTableRepository = votingTableRepository;
-        this.votedCitizenRepository = votedCitizenRepository;
         this.citizensByTableCache = new ConcurrentHashMap<>();
         try {
             initElectionBasicData();
@@ -59,6 +93,26 @@ public class ServerImpl implements ServerService {
             t.printStackTrace(System.err);
             throw t;
         }
+        
+        for (int i = 0; i < VOTING_EM_POOL_SIZE; i++) {
+            votingEMPool.offer(JPAUtil.getEntityManagerVoting());
+        }
+        
+        this.voteQueue = new LinkedBlockingQueue<>(VOTE_QUEUE_CAPACITY);
+        this.pendingQueue = new LinkedBlockingQueue<>(PENDING_QUEUE_CAPACITY);
+        this.voteProcessingExecutor = Executors.newFixedThreadPool(VOTE_PROCESSING_THREADS);
+        this.pendingQueueProcessors = Executors.newFixedThreadPool(PENDING_QUEUE_PROCESSORS);
+        
+        for (int i = 0; i < VOTE_PROCESSING_THREADS; i++) {
+            voteProcessingExecutor.submit(this::voteProcessingWorker);
+        }
+        
+        for (int i = 0; i < PENDING_QUEUE_PROCESSORS; i++) {
+            final int workerId = i;
+            pendingQueueProcessors.submit(() -> pendingQueueWorker(workerId));
+        }
+        
+        System.out.println("ServerImpl initialized with async vote processing system");
     }
 
     private void initElectionBasicData() {
@@ -109,116 +163,223 @@ public class ServerImpl implements ServerService {
             .toArray(VotingTableData[]::new);
     }
 
+    private EntityManager borrowVotingEM() throws InterruptedException {
+        EntityManager em = votingEMPool.poll(100, TimeUnit.MILLISECONDS);
+        if (em == null) {
+            em = JPAUtil.getEntityManagerVoting();
+        }
+        return em;
+    }
+    
+    private void returnVotingEM(EntityManager em) {
+        if (em != null && em.isOpen()) {
+            votingEMPool.offer(em);
+        }
+    }
+
     @Override
     public void registerVote(VoteData vote, Current current)
         throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable {
+        
         if (this.candidates == null || this.votingTablesByStation == null) {
             initElectionBasicData();
         }
-
-        Citizen citizen = citizenRepository.findByDocument(vote.citizenDocument)
-            .orElseThrow(() -> new CitizenNotFound("Citizen with document " + vote.citizenDocument + " not found"));
-        if (votedCitizenRepository.existsById(citizen.getId())) {
-            throw new CitizenAlreadyVoted("Citizen with document " + vote.citizenDocument + " (ID: " + citizen.getId() + ") has already voted");
-        }
-
-        if (citizen.getVotingTable().getId() != vote.tableId) {
-            throw new CitizenNotBelongToTable("Citizen with document " + vote.citizenDocument + " (ID: " + citizen.getId() + ") does not belong to voting table " + vote.tableId);
+        
+        boolean candidateExists = this.candidates.stream()
+            .anyMatch(c -> c.getId() == vote.candidateId);
+        if (!candidateExists) {
+            throw new CandidateNotFound("Candidate with ID " + vote.candidateId + " not found");
         }
         
-        Candidate candidateEntity = this.candidates.stream()
-            .filter(c -> c.getId() == vote.candidateId)
-            .findFirst()
-            .orElseThrow(() -> new CandidateNotFound("Candidate with ID " + vote.candidateId + " not found"));
-
-        votedCitizenRepository.save(new VotedCitizen(citizen.getId()));
-
-        Vote newVoteToSave = new Vote();
-        newVoteToSave.setCandidate(candidateEntity);
-        newVoteToSave.setTableId(vote.tableId);
-        newVoteToSave.setTimestamp(java.time.LocalDateTime.now());
-        if (this.currentElection != null) {
-            newVoteToSave.setElection(this.currentElection);
-        }
-
-        voteRepository.save(newVoteToSave);
-        System.out.println("Vote registered for citizen: " + vote.citizenDocument);
-
-        Map<String, String> details = new HashMap<>();
-        details.put("citizenDocument", vote.citizenDocument);
-        details.put("citizenId", String.valueOf(citizen.getId()));
-        details.put("candidateId", String.valueOf(vote.candidateId));
-        details.put("tableId", String.valueOf(vote.tableId));
-        if (this.currentElection != null) {
-            details.put("electionId", String.valueOf(this.currentElection.getId()));
-        }
-        details.put("originalTimestamp", vote.timestamp);
-
-        ElectionEvent event = new ElectionEvent(
-            EventType.VoteRegistered,
-            LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME),
-            details
-        );
-        notifySubscribers(event);
-    }
-
-    @Override
-    public void subscribe(EventObserverPrx observer, String observerIdentity, Current current) {
-        if (observer == null || observerIdentity == null || observerIdentity.isEmpty()) {
-            System.err.println("Subscribe attempt with null observer or empty identity.");
+        VoteProcessingTask task = new VoteProcessingTask(vote);
+        
+        if (voteQueue.offer(task)) {
             return;
         }
-
+        
+        if (pendingQueue.offer(task)) {
+            pendingVotes.incrementAndGet();
+            return;
+        }
+        
+        long currentProcessed = processedVotes.get();
+        throw new RuntimeException("Vote processing system at absolute maximum capacity - " + 
+                                 currentProcessed + " votes processed so far.");
+    }
+    
+    private void voteProcessingWorker() {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                VoteProcessingTask task = voteQueue.take();
+                processVoteAsync(task);
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                System.err.println("Error processing vote: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
+    
+    private void pendingQueueWorker(int workerId) {
+        while (isPendingQueueActive.get() && !Thread.currentThread().isInterrupted()) {
+            try {
+                VoteProcessingTask pendingTask = pendingQueue.poll(PENDING_RETRY_INTERVAL_MS, TimeUnit.MILLISECONDS);
+                
+                if (pendingTask != null) {
+                    if (voteQueue.offer(pendingTask)) {
+                        pendingVotes.decrementAndGet();
+                    } else {
+                        if (!pendingQueue.offer(pendingTask)) {
+                            System.err.println("Pending queue overflow - dropping vote task for worker " + workerId);
+                        }
+                    }
+                }
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                System.err.println("Error in pending queue worker " + workerId + ": " + e.getMessage());
+            }
+        }
+    }
+    
+    private void processVoteAsync(VoteProcessingTask task) {
+        EntityManager votingEM = null;
+        EntityManager electionsEM = null;
+        
         try {
-            observer.ice_ping();
-            subscribers.put(observerIdentity, observer);
-            System.out.println("Observer '" + observerIdentity + "' subscribed successfully.");
-        } catch (Exception e) {
-            System.err.println("Failed to subscribe observer '" + observerIdentity + "': " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void unsubscribe(String observerIdentity, Current current) {
-        if (observerIdentity == null || observerIdentity.isEmpty()) {
-            return;
-        }
-        EventObserverPrx removed = subscribers.remove(observerIdentity);
-        if (removed != null) {
-            System.out.println("Observer '" + observerIdentity + "' unsubscribed.");
-        }
-    }
-
-    private void notifySubscribers(ElectionEvent event) {
-        List<Map.Entry<String, EventObserverPrx>> toNotify = new ArrayList<>(subscribers.entrySet());
-
-        for (Map.Entry<String, EventObserverPrx> entry : toNotify) {
-            String identity = entry.getKey();
-            EventObserverPrx observer = entry.getValue();
+            votingEM = borrowVotingEM();
+            electionsEM = JPAUtil.getEntityManagerElections();
             
-            CompletableFuture.runAsync(() -> {
-                try {
-                    if (observer == null) {
-                        subscribers.remove(identity);
-                        return;
+            final EntityManager finalElectionsEM = electionsEM;
+            
+            JPAUtil.executeInTransactionVoid(votingEM, votingEntityManager -> {
+                TypedQuery<Object[]> citizenQuery = votingEntityManager.createQuery(
+                    "SELECT c.id, c.votingTable.id FROM Citizen c WHERE c.document = :document", 
+                    Object[].class
+                );
+                citizenQuery.setParameter("document", task.vote.citizenDocument);
+                citizenQuery.setHint("org.hibernate.readOnly", true);
+                
+                List<Object[]> citizenResults = citizenQuery.getResultList();
+                if (citizenResults.isEmpty()) {
+                    throw new RuntimeException(new CitizenNotFound("Citizen with document " + task.vote.citizenDocument + " not found"));
+                }
+                
+                Object[] citizenResult = citizenResults.get(0);
+                Integer citizenId = (Integer) citizenResult[0];
+                Integer citizenTableId = (Integer) citizenResult[1];
+                
+                if (!citizenTableId.equals(task.vote.tableId)) {
+                    throw new RuntimeException(new CitizenNotBelongToTable("Citizen with document " + task.vote.citizenDocument + " (ID: " + citizenId + ") does not belong to voting table " + task.vote.tableId));
+                }
+                
+                JPAUtil.executeInTransactionVoid(finalElectionsEM, electionsEntityManager -> {
+                    TypedQuery<Long> votedQuery = electionsEntityManager.createQuery(
+                        "SELECT COUNT(vc) FROM VotedCitizen vc WHERE vc.citizenId = :citizenId", 
+                        Long.class
+                    );
+                    votedQuery.setParameter("citizenId", citizenId);
+                    Long voteCount = votedQuery.getSingleResult();
+                    
+                    if (voteCount > 0) {
+                        throw new RuntimeException(new CitizenAlreadyVoted("Citizen with document " + task.vote.citizenDocument + " (ID: " + citizenId + ") has already voted"));
                     }
                     
-                    EventObserverPrx timeoutObserver = observer.ice_timeout(NOTIFICATION_TIMEOUT_SECONDS * 1000);
-                    timeoutObserver._notify(event);
+                    Candidate candidateEntity = this.candidates.stream()
+                        .filter(c -> c.getId() == task.vote.candidateId)
+                        .findFirst()
+                        .orElseThrow(() -> new RuntimeException(new CandidateNotFound("Candidate with ID " + task.vote.candidateId + " not found")));
                     
-                } catch (com.zeroc.Ice.ObjectNotExistException e) {
-                    subscribers.remove(identity);
-                } catch (com.zeroc.Ice.CommunicatorDestroyedException e) {
-                    subscribers.remove(identity);
-                } catch (TimeoutException e) {
-                    System.err.println("Timeout notifying observer '" + identity + "'");
-                } catch (ConnectFailedException e) {
-                    subscribers.remove(identity);
-                } catch (Exception e) {
-                    System.err.println("Failed to notify observer '" + identity + "': " + e.getMessage());
-                }
-            }).orTimeout(NOTIFICATION_TIMEOUT_SECONDS + 1, TimeUnit.SECONDS)
-            .exceptionally(throwable -> null);
+                    electionsEntityManager.persist(new VotedCitizen(citizenId));
+                    
+                    Vote newVote = new Vote();
+                    newVote.setCandidate(candidateEntity);
+                    newVote.setTableId(task.vote.tableId);
+                    newVote.setTimestamp(LocalDateTime.now());
+                    newVote.setElection(this.currentElection);
+                    electionsEntityManager.persist(newVote);
+                    
+                    electionsEntityManager.flush();
+                });
+            });
+            
+            long processingTime = System.currentTimeMillis() - task.submitTime;
+            long processed = processedVotes.incrementAndGet();
+            
+            if (processed % 1000 == 0) {
+                System.out.println("Processed " + processed + " votes. Last processing time: " + processingTime + "ms");
+            }
+            
+            task.resultFuture.complete(null);
+            
+        } catch (Exception e) {
+            System.err.println("Error processing vote for " + task.vote.citizenDocument + ": " + e.getMessage());
+            task.resultFuture.completeExceptionally(e);
+        } finally {
+            if (votingEM != null) {
+                returnVotingEM(votingEM);
+            }
+            if (electionsEM != null && electionsEM.isOpen()) {
+                electionsEM.close();
+            }
+        }
+    }
+    
+    @Override
+    public String getProcessingStats(Current current) {
+        return String.format("Processed: %d, Primary queue: %d/%d, Pending: %d/%d, Workers: %d+%d, Active: %s", 
+                           processedVotes.get(), 
+                           voteQueue.size(), VOTE_QUEUE_CAPACITY,
+                           pendingQueue.size(), PENDING_QUEUE_CAPACITY,
+                           VOTE_PROCESSING_THREADS, PENDING_QUEUE_PROCESSORS,
+                           isPendingQueueActive.get());
+    }
+
+    @Override
+    public void printQueueStatus(Current current) {
+        System.out.println("=== QUEUE STATUS ===");
+        System.out.println("Processed votes: " + processedVotes.get());
+        System.out.println("Primary queue: " + voteQueue.size() + "/" + VOTE_QUEUE_CAPACITY + 
+                         " (" + String.format("%.1f", (double) voteQueue.size() / VOTE_QUEUE_CAPACITY * 100) + "%)");
+        System.out.println("Pending queue: " + pendingQueue.size() + "/" + PENDING_QUEUE_CAPACITY + 
+                         " (" + String.format("%.1f", (double) pendingQueue.size() / PENDING_QUEUE_CAPACITY * 100) + "%)");
+        System.out.println("Vote processing workers: " + VOTE_PROCESSING_THREADS + " active");
+        System.out.println("Pending queue workers: " + PENDING_QUEUE_PROCESSORS + " active");
+        System.out.println("Pending queue active: " + isPendingQueueActive.get());
+        System.out.println("===================");
+    }
+
+    public void shutdown() {
+        System.out.println("Initiating ServerImpl shutdown...");
+        
+        isPendingQueueActive.set(false);
+        
+        voteProcessingExecutor.shutdown();
+        pendingQueueProcessors.shutdown();
+        
+        try {
+            if (!voteProcessingExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                System.out.println("Force shutting down vote processing executor");
+                voteProcessingExecutor.shutdownNow();
+            }
+            
+            if (!pendingQueueProcessors.awaitTermination(30, TimeUnit.SECONDS)) {
+                System.out.println("Force shutting down pending queue processors");
+                pendingQueueProcessors.shutdownNow();
+            }
+            
+            System.out.println("ServerImpl shutdown completed");
+            
+        } catch (InterruptedException e) {
+            System.out.println("Shutdown interrupted, forcing immediate shutdown");
+            voteProcessingExecutor.shutdownNow();
+            pendingQueueProcessors.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -299,17 +460,17 @@ public class ServerImpl implements ServerService {
 
     @Override
     public CandidateResult[] getGlobalResults(Current current) {
-    Map<Integer, Long> votesByCandidate = candidates.stream().collect(Collectors.toMap(
-        Candidate::getId,
-        c -> voteRepository.countByCandidateId(c.getId())
-    ));
+        Map<Integer, Long> votesByCandidate = candidates.stream().collect(Collectors.toMap(
+            Candidate::getId,
+            c -> voteRepository.countByCandidateId(c.getId())
+        ));
 
-    return candidates.stream()
-        .map(c -> new CandidateResult(
-            c.getId(),
-            c.getFirstName() + " " + c.getLastName(),
-            votesByCandidate.getOrDefault(c.getId(), 0L).intValue()
-        )).toArray(CandidateResult[]::new);
+        return candidates.stream()
+            .map(c -> new CandidateResult(
+                c.getId(),
+                c.getFirstName() + " " + c.getLastName(),
+                votesByCandidate.getOrDefault(c.getId(), 0L).intValue()
+            )).toArray(CandidateResult[]::new);
     }
 
     @Override
@@ -342,6 +503,65 @@ public class ServerImpl implements ServerService {
         } catch (Exception e) {
             System.err.println("Error getting citizens for table " + tableId + ": " + e.getMessage());
             return new CitizenData[0];
+        }
+    }
+
+    @Override
+    public void subscribe(EventObserverPrx observer, String subscriberId, Current current) {
+        if (observer == null) {
+            System.err.println("Cannot subscribe: observer is null");
+            return;
+        }
+        
+        if (subscriberId == null || subscriberId.trim().isEmpty()) {
+            System.err.println("Cannot subscribe: subscriber ID is null or empty");
+            return;
+        }
+
+        subscribers.put(subscriberId, observer);
+        System.out.println("Subscriber " + subscriberId + " registered successfully");
+        
+        if (this.currentElection != null) {
+            try {
+                Map<String, String> details = new HashMap<>();
+                details.put("electionId", String.valueOf(this.currentElection.getId()));
+                details.put("electionName", this.currentElection.getName());
+                details.put("startTime", this.currentElection.getStartTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                details.put("endTime", this.currentElection.getEndTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                
+                ElectionEvent welcomeEvent = new ElectionEvent(
+                    EventType.ElectionStarted,
+                    LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME),
+                    details
+                );
+                
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        observer._notify(welcomeEvent);
+                    } catch (Exception e) {
+                        System.err.println("Failed to send welcome event to subscriber " + subscriberId + ": " + e.getMessage());
+                        subscribers.remove(subscriberId);
+                    }
+                });
+                
+            } catch (Exception e) {
+                System.err.println("Error creating welcome event for subscriber " + subscriberId + ": " + e.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public void unsubscribe(String subscriberId, Current current) {
+        if (subscriberId == null || subscriberId.trim().isEmpty()) {
+            System.err.println("Invalid subscriber ID for unsubscribe: " + subscriberId);
+            return;
+        }
+
+        boolean removed = subscribers.remove(subscriberId) != null;
+        if (removed) {
+            System.out.println("Subscriber " + subscriberId + " unsubscribed successfully");
+        } else {
+            System.out.println("Subscriber " + subscriberId + " was not found in the subscription list");
         }
     }
 }

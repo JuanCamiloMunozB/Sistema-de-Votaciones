@@ -29,13 +29,32 @@ public class JPAUtil {
 
     private static void createEntityManagerFactories() {
         try {
-            // Common properties
             Map<String, String> baseProperties = new HashMap<>();
             baseProperties.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
             baseProperties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
             baseProperties.put("hibernate.show_sql", "false");
-            baseProperties.put("hibernate.format_sql", "true");
-            baseProperties.put("hibernate.connection.pool_size", "10");
+            baseProperties.put("hibernate.format_sql", "false");
+            
+            baseProperties.put("hibernate.connection.pool_size", "50");
+            baseProperties.put("hibernate.jdbc.batch_size", "100");
+            baseProperties.put("hibernate.order_inserts", "true");
+            baseProperties.put("hibernate.order_updates", "true");
+            baseProperties.put("hibernate.jdbc.batch_versioned_data", "true");
+            
+            baseProperties.put("hibernate.cache.use_second_level_cache", "false");
+            baseProperties.put("hibernate.cache.use_query_cache", "false");
+            
+            baseProperties.put("hibernate.connection.provider_disables_autocommit", "true");
+            baseProperties.put("hibernate.jdbc.lob.non_contextual_creation", "true");
+            
+            baseProperties.put("hibernate.c3p0.min_size", "10");
+            baseProperties.put("hibernate.c3p0.max_size", "50");
+            baseProperties.put("hibernate.c3p0.timeout", "1800");
+            baseProperties.put("hibernate.c3p0.max_statements", "150");
+            
+            baseProperties.put("hibernate.jdbc.use_get_generated_keys", "true");
+            baseProperties.put("hibernate.jdbc.use_streams_for_binary", "true");
+            baseProperties.put("hibernate.jdbc.use_scrollable_resultset", "true");
 
             Properties config = communicator.getProperties();
 
@@ -45,7 +64,6 @@ public class JPAUtil {
             votingProps.put("jakarta.persistence.jdbc.user", config.getProperty("database.votaciones.user"));
             votingProps.put("jakarta.persistence.jdbc.password", config.getProperty("database.votaciones.password"));
             votingProps.put("jakarta.persistence.jdbc.url", config.getProperty("database.votaciones.url"));
-            System.out.println(votingProps);
             emfVoting = Persistence.createEntityManagerFactory("VotingPU", votingProps);
 
             // EntityManagerFactory for Application DB (votos, candidatos, elecciones, etc)
@@ -56,7 +74,7 @@ public class JPAUtil {
             electionProps.put("jakarta.persistence.jdbc.url", config.getProperty("database.elections.url"));
             emfElections = Persistence.createEntityManagerFactory("ElectionPU", electionProps);
 
-            System.out.println("EntityManagerFactories initialized successfully");
+            System.out.println("EntityManagerFactories initialized successfully with high-volume optimizations (cache disabled)");
 
         } catch (Exception e) {
             System.err.println("Error initializing JPA: " + e.getMessage());

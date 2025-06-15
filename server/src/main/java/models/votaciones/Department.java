@@ -2,9 +2,14 @@ package models.votaciones;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 
 @Entity
-@Table(name = "departamento")
+@Table(name = "departamento", indexes = {
+    @Index(name = "idx_department_name", columnList = "nombre")
+})
+@Cache(usage = CacheConcurrencyStrategy.READ_ONLY)
 @Data
 public class Department {
 
