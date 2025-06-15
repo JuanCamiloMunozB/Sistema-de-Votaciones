@@ -4,15 +4,15 @@
         <server-template id="ServerServiceTemplate">
             <parameter name="index"/>
             <parameter name="port"/>
-            <parameter name="exepath" default="..\Sistema-de-Votaciones\server\build\libs\server.jar"/>
+            <parameter name="exepath" default="../Sistema-de-Votaciones/server/build/libs/server.jar"/>
             <server id="ServerServiceInstance${index}" exe="java" activation="always" activation-timeout="120" application-distrib="false">
                 <option>-Xms6144m</option>
                 <option>-Xmx6144m</option>
                 <option>-cp</option>
                 <option>${exepath}</option>
                 <option>ServerMain</option>
-                <option>--Ice.Config=..\Sistema-de-Votaciones\server\src\main\resources\config.server${index}.cfg</option>
-                <property name="Ice.Config" value="..\Sistema-de-Votaciones\server\src\main\resources\config.server${index}.cfg"/>
+                <option>--Ice.Config=../Sistema-de-Votaciones/server/src/main/resources/config.server${index}.cfg</option>
+                <property name="Ice.Config" value="../Sistema-de-Votaciones/server/src/main/resources/config.server${index}.cfg"/>
                 <property name="Server.Instance.Id" value="ServerInstance${index}"/>
                 <!-- Adaptador con endpoints TCP específicos -->
                 <adapter name="ServerAdapter${index}" id="ServerAdapter${index}ID" replica-group="ServerServiceReplicas" endpoints="tcp -p ${port}">
@@ -34,9 +34,9 @@
                 <option>-Xms6144m</option>
                 <option>-Xmx6144m</option>
                 <option>-cp</option>
-                <option>..\Sistema-de-Votaciones\control_center\build\libs\control_center.jar</option>
+                <option>../Sistema-de-Votaciones/control_center/build/libs/control_center.jar</option>
                 <option>ControlCenterMain</option>
-                <property name="Ice.Config" value="..\Sistema-de-Votaciones\control_center\src\main\resources\config.control.cfg"/>
+                <property name="Ice.Config" value="../Sistema-de-Votaciones/control_center/src/main/resources/config.control.cfg"/>
                 <adapter name="ControlCenterAdapter" id="ControlCenterAdapterID" endpoints="tcp -p 10003">
                     <object identity="ControlCenterService" type="::ElectionSystem::ControlCenterService"/>
                 </adapter>
