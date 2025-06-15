@@ -331,4 +331,17 @@ public class ServerImpl implements ServerService {
 
     return tableResults;
     }
+
+    @Override
+    public CitizenData[] getCitizensByTableId(int tableId, Current current) {
+        try {
+            List<Citizen> citizens = citizenRepository.findByVotingTableId(tableId);
+            return citizens.stream()
+                .map(this::convertCitizenToCitizenData)
+                .toArray(CitizenData[]::new);
+        } catch (Exception e) {
+            System.err.println("Error getting citizens for table " + tableId + ": " + e.getMessage());
+            return new CitizenData[0];
+        }
+    }
 }

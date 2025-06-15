@@ -276,8 +276,8 @@ public class ControlCenterImpl implements ControlCenterService {
             System.out.println("ControlCenterImpl.submitVote: serverService.registerVote completed WITHOUT exception for " + vote.citizenDocument); 
             System.out.println("Vote submitted successfully for document: " + vote.citizenDocument);
         } catch (CitizenAlreadyVoted | CitizenNotFound | CandidateNotFound | CitizenNotBelongToTable e) {
-            System.err.println("ControlCenterImpl.submitVote: CAUGHT BUSINESS EXCEPTION: " + e.ice_name() + " - " + e.getMessage()); 
-            System.err.println("Failed to submit vote: " + e.ice_name() + " - " + e.getMessage());
+            System.err.println("ControlCenterImpl.submitVote: CAUGHT BUSINESS EXCEPTION: " + e.getClass().getSimpleName() + " - " + e.getMessage()); 
+            System.err.println("Failed to submit vote: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             throw e;
         } catch (ConnectTimeoutException | ConnectionRefusedException | NotRegisteredException e) {
            System.err.println("ControlCenterImpl.submitVote: Server unavailable, adding vote to pending queue: " + e.getMessage());
@@ -346,6 +346,16 @@ public class ControlCenterImpl implements ControlCenterService {
             System.out.println("ControlCenter [" + controlCenterId + "]: Mesa de votación '" + votingTableIdentity + "' desuscrita de actividad electoral.");
         } else {
             System.out.println("ControlCenter [" + controlCenterId + "]: Mesa de votación '" + votingTableIdentity + "' no encontrada para desuscripción.");
+        }
+    }
+
+    @Override
+    public CitizenData[] getCitizensByTableId(int tableId, Current current) {
+        try {
+            return serverService.getCitizensByTableId(tableId);
+        } catch (Exception e) {
+            System.err.println("ControlCenter [" + controlCenterId + "]: Error getting citizens for table " + tableId + ": " + e.getMessage());
+            return new CitizenData[0];
         }
     }
 

@@ -38,7 +38,7 @@ public class VotingTableImpl implements VotingTableCombinedService {
             controlCenterService.submitVote(vote);
             System.out.println("VotingTable [" + votingTableId + "]: Vote submitted for citizen: " + vote.citizenDocument);
         } catch (CitizenAlreadyVoted | CitizenNotFound | CandidateNotFound | CitizenNotBelongToTable e) {
-            System.err.println("VotingTable [" + votingTableId + "]: Vote rejected: " + e.ice_name());
+            System.err.println("VotingTable [" + votingTableId + "]: Vote rejected: " + e.getClass().getSimpleName());
             throw e;
         } catch (com.zeroc.Ice.CommunicatorDestroyedException | com.zeroc.Ice.ObjectNotExistException e) {
             System.err.println("VotingTable [" + votingTableId + "]: Control Center unavailable.");

@@ -99,6 +99,7 @@ module ElectionSystem {
         string findVotingStationByDocument(string document);
         CandidateResultSeq getGlobalResults();
         TableResultsMap getResultsByVotingTable();
+        CitizenDataSeq getCitizensByTableId(int tableId);
     }
 
     interface ControlCenterService {
@@ -109,6 +110,7 @@ module ElectionSystem {
         void submitVote(VoteData vote) throws CitizenAlreadyVoted, CitizenNotFound, CandidateNotFound, CitizenNotBelongToTable, ElectionInactive;
         void subscribeElectionActivity(ElectionActivityObserver* observer, string votingTableIdentity);
         void unsubscribeElectionActivity(string votingTableIdentity);
+        CitizenDataSeq getCitizensByTableId(int tableId);
     }
 
     interface VoteStation{
