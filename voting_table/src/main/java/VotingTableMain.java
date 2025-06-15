@@ -13,19 +13,14 @@ import java.util.Scanner;
 import java.time.LocalDateTime; 
 import java.time.format.DateTimeFormatter; 
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Random;
-import java.util.Queue; 
-import java.util.LinkedList; 
 
 public class VotingTableMain {
     
     private static VotingTableImpl votingTableImpl;
-    private static final int[] TEST_CANDIDATE_IDS = {1, 2, 3, 4};
-
     public static void main(String[] args) {
         String tableIdStr = System.getProperty("VOTING_TABLE_ID", "Table1");
         int numericTableId; 
@@ -313,7 +308,7 @@ public class VotingTableMain {
                         long voteStart = System.currentTimeMillis();
                         
                         try {
-                            int result = votingTableImpl.vote(citizenDocument, candidateId, null);
+                            votingTableImpl.vote(citizenDocument, candidateId, null);
                             long voteEnd = System.currentTimeMillis();
                             long responseTime = voteEnd - voteStart;
                             
