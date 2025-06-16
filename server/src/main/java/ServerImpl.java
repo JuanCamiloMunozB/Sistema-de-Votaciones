@@ -29,6 +29,7 @@ import com.zeroc.Ice.Current;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
+import java.util.stream.Collectors;
 
 public class ServerImpl implements ServerService {
     
@@ -390,7 +391,7 @@ public class ServerImpl implements ServerService {
             election.getEndTime().format(DateTimeFormatter.ISO_DATE_TIME),
             this.candidates.stream()
                 .map(this::convertCandidateToCandidateData)
-                .toList().toArray(new CandidateData[0])
+                .collect(Collectors.toList()).toArray(new CandidateData[0])
         );
     }
 
@@ -401,7 +402,7 @@ public class ServerImpl implements ServerService {
             votingTable.getId(),
             citizensInTable.stream()
                 .map(this::convertCitizenToCitizenData)
-                .toList().toArray(new CitizenData[0])
+                .collect(Collectors.toList()).toArray(new CitizenData[0])
         );
     }
 
@@ -419,7 +420,7 @@ public class ServerImpl implements ServerService {
     public CandidateData[] getCandidates(Current current) {
         return this.candidates.stream()
             .map(this::convertCandidateToCandidateData)
-            .toList().toArray(new CandidateData[0]);
+            .collect(Collectors.toList()).toArray(new CandidateData[0]);
     }
 
     private CandidateData convertCandidateToCandidateData(Candidate candidate) {
