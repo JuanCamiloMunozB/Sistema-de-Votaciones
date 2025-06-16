@@ -331,12 +331,12 @@ public class QueryStationMain {
         
         // Performance verdict
         boolean targetAchieved = actualQPS >= (targetQPS * 0.80); // 80% of target is acceptable
-        System.out.println("\nPERFORMANCE VERDICT: " + (targetAchieved ? "✅ PASSED" : "❌ FAILED"));
+        System.out.println("\nPERFORMANCE VERDICT: " + (targetAchieved ? "PASSED" : "FAILED"));
         
         if (targetAchieved) {
             System.out.println("The system successfully handled the target load!");
             if (actualQPS >= 2667) {
-                System.out.println("🎉 Target of 160,000 queries per minute achieved!");
+                System.out.println("Target of 160,000 queries per minute achieved!");
             }
         } else {
             System.out.println("The system did not meet the target performance.");

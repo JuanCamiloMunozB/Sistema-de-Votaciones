@@ -471,7 +471,7 @@ public class ServerImpl implements ServerService {
             election.getEndTime().format(DateTimeFormatter.ISO_DATE_TIME),
             this.candidates.stream()
                 .map(this::convertCandidateToCandidateData)
-                .toList().toArray(new CandidateData[0])
+                .collect(Collectors.toList()).toArray(new CandidateData[0])
         );
     }
 
@@ -482,7 +482,7 @@ public class ServerImpl implements ServerService {
             votingTable.getId(),
             citizensInTable.stream()
                 .map(this::convertCitizenToCitizenData)
-                .toList().toArray(new CitizenData[0])
+                .collect(Collectors.toList()).toArray(new CitizenData[0])
         );
     }
 
@@ -508,7 +508,7 @@ public class ServerImpl implements ServerService {
         
         return this.candidates.stream()
             .map(this::convertCandidateToCandidateData)
-            .toList().toArray(new CandidateData[0]);
+            .collect(Collectors.toList()).toArray(new CandidateData[0]);
     }
 
     private CandidateData convertCandidateToCandidateData(Candidate candidate) {
